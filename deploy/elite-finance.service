@@ -1,0 +1,18 @@
+[Unit]
+Description=Elite Finance - المتابعة المالية
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/elite-finance
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/elite-finance/.env
+User=www-data
+Group=www-data
+# بيانات البرنامج تُحفظ هنا
+Environment=DATA_DIR=/opt/elite-finance/data
+
+[Install]
+WantedBy=multi-user.target
