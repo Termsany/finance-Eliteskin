@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+      PORT: "3200"
+    ports:
+      - "127.0.0.1:3200:3200"
+    volumes:
+      - ./data:/app/data
