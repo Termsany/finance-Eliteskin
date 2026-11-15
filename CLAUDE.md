@@ -5,8 +5,9 @@ When a request starts with «في المالية», the work belongs here. When 
 `Termsany/elitskincrm` (crm.eliteskinsa.com), not here. If a request names neither and it isn't obvious,
 ask which app before changing anything.
 
-- Address: finance.eliteskinsa.com · repo `Termsany/finance-Eliteskin` · no auto-deploy: after merging to
-  `main` the owner runs `sudo bash /opt/elite-finance-v2/deploy/update.sh` on the server
+- Address: finance.eliteskinsa.com · repo `Termsany/finance-Eliteskin` · deploys to the VPS on every push to
+  `main` (`.github/workflows/deploy.yml` → `deploy/auto-deploy.sh`, once the deploy key is set up with
+  `deploy/setup-auto-deploy.sh`); by hand: `sudo bash /opt/elite-finance-v2/deploy/update.sh`
 - Users: the owner only (one password, changed from الإعدادات)
 - Belongs here: the company's books from Daftra (read-only) — summary, customers and suppliers with
   statements, company expenses (Daftra + the app's own fixed/temporary/one-off), profit and loss, VAT,

@@ -1,0 +1,31 @@
+name: Deploy to VPS
+
+# Every push to main updates «المالية» on the server. The key is locked server-side (forced command in
+# authorized_keys) to deploy/auto-deploy.sh, whatever is requested here.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deploy on the VPS
+        env:
+          KEY_B64: ${{ secrets.FINANCE_DEPLOY_KEY_B64 }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -z "$KEY_B64" ] || [ -z "$DEPLOY_HOST" ]; then
+            echo "Auto-deploy isn't set up yet: run deploy/setup-auto-deploy.sh on the server and add the two secrets. Skipping."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=30 -o BatchMode=yes \
+            "root@${DEPLOY_HOST}" deploy

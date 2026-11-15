@@ -27,9 +27,22 @@ curl -fsSL https://raw.githubusercontent.com/Termsany/finance-Eliteskin/main/dep
 
 ## التحديث بعد كده
 
+**تلقائي:** أي دمج على `main` بيحدّث السيرفر لوحده. بيتظبط مرة واحدة:
+
+```bash
+sudo bash /opt/elite-finance-v2/deploy/setup-auto-deploy.sh
+```
+
+وبعدين تحط القيمتين اللي بيطبعهم في GitHub (Settings ← Secrets and variables ← Actions):
+`FINANCE_DEPLOY_KEY_B64` و `DEPLOY_HOST`. المفتاح ده ما يقدرش يعمل حاجة غير تحديث «المالية».
+
+**يدوي (في أي وقت):**
+
 ```bash
 sudo bash /opt/elite-finance-v2/deploy/update.sh
 ```
+
+التحديث بيبني النسخة الجديدة ويتأكد إنها شغالة، ولو ما اشتغلتش بيرجّع النسخة اللي قبلها لوحده.
 
 ## التشغيل محلياً
 
