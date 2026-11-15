@@ -1,12 +1,44 @@
+# المتابعة المالية v2 — البرنامج + قاعدة بيانات Postgres على نفس السيرفر.
+# nginx بيوجّه finance.eliteskinsa.com للمنفذ 3200 زي النسخة الأولى بالظبط.
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: finance
+      POSTGRES_USER: finance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance -d finance"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   app:
     build: .
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     env_file: .env
     environment:
-      DATA_DIR: /app/data
-      PORT: "3200"
+      DATABASE_URL: postgres://finance:${POSTGRES_PASSWORD}@db:5432/finance
+      NODE_ENV: production
+      TZ: Asia/Riyadh
+      LEGACY_DATA_DIR: /app/legacy
+    volumes:
+      # بيانات النسخة الأولى (data/db.json) — بتتقري مرة واحدة بس عشان تنقل المصاريف والمفاتيح
+      - ${LEGACY_DATA_PATH:-./data}:/app/legacy:ro
     ports:
       - "127.0.0.1:3200:3200"
-    volumes:
-      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3200/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  pgdata:

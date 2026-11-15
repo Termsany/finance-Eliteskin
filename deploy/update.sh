@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-# تحديث البرنامج دون المساس بـ .env ولا البيانات.
-set -e
-APP_DIR=/opt/elite-finance
-SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-echo "==> تحديث الملفات (مع الحفاظ على .env و data)"
-rsync -a --exclude node_modules --exclude data --exclude .env --exclude .git "$SRC_DIR"/ "$APP_DIR"/
-cd "$APP_DIR"
-npm install --omit=dev --no-audit --no-fund
-chown -R www-data:www-data "$APP_DIR"
-systemctl restart elite-finance
-echo "==> تم. تابع:  journalctl -u elite-finance -f"
+# تحديث المتابعة المالية لآخر نسخة على GitHub (البيانات والإعدادات ما بتتلمسش):
+#   sudo bash /opt/elite-finance-v2/deploy/update.sh
+set -euo pipefail
+cd "$(dirname "$0")/.."
+git fetch -q origin main && git reset -q --hard origin/main
+docker compose up -d --build
+for i in $(seq 1 60); do curl -fs -m 3 http://127.0.0.1:3200/api/health >/dev/null 2>&1 && { echo "==> تم ✓ ($(git rev-parse --short HEAD))"; exit 0; }; sleep 3; done
+echo "!! البرنامج ما ردّش بعد التحديث:"; docker compose logs --tail 80 app; exit 1

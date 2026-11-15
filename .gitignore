@@ -1,5 +1,25 @@
-node_modules/
-data/
+# dependencies & build output
+node_modules
+.next
+out
+*.tsbuildinfo
+
+# secrets & local env
 .env
+.env.local
+.env.*.local
+.vercel
+
+# local data (may contain PII) and runtime state
+data/
+backups/
+.hermes-backups/
+uploads/
+
+# stray nested copy (accidental)
+/opt/
+
+# logs & misc
 *.log
-*.corrupt-*
+.DS_Store
+legacy/
