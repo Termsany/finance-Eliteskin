@@ -12,17 +12,18 @@ import { Expenses, Pnl, Vat, Products } from "./books";
 import { CashTab } from "./cash";
 import { AuditTab } from "./audit";
 import { AiAdvisor } from "./ai";
+import { Collections } from "./collections";
 
 export type AccData = FinData & { attention?: Attention[] };
 /** Old tab names ("ar", "ap", "pricing") still work so restored links keep opening the right place. */
-export type Tab = "summary" | "clients" | "suppliers" | "expenses" | "pnl" | "vat" | "cash" | "products" | "audit" | "ar" | "ap" | "pricing" | "advisor" | "sales";
+export type Tab = "summary" | "collections" | "clients" | "suppliers" | "expenses" | "pnl" | "vat" | "cash" | "products" | "audit" | "ar" | "ap" | "pricing" | "advisor" | "sales";
 export type Open = (kind: PartyKind, name: string) => void;
 const ALIAS: Partial<Record<Tab, Tab>> = { ar: "clients", ap: "suppliers", pricing: "products", advisor: "summary", sales: "clients" };
-const TABS: Array<[Tab, string, string]> = [["summary", "الملخص", "dashboard"], ["clients", "العملاء", "doctors"], ["suppliers", "الموردين", "send"], ["expenses", "المصروفات", "wallet"],
+const TABS: Array<[Tab, string, string]> = [["summary", "الملخص", "dashboard"], ["collections", "التحصيل", "time"], ["clients", "العملاء", "doctors"], ["suppliers", "الموردين", "send"], ["expenses", "المصروفات", "wallet"],
   ["pnl", "الأرباح والخسائر", "reports"], ["vat", "الضريبة", "file"], ["cash", "السيولة", "time"], ["products", "المنتجات والأسعار", "products"], ["audit", "مراجعة الحسابات", "check"]];
 const EXCEL: Partial<Record<Tab, string>> = { summary: "summary", clients: "ar", suppliers: "ap", expenses: "pnl", pnl: "pnl", vat: "summary", products: "pricing" };
 const CHIPS = ["لخّص لي وضع الفلوس في 5 سطور: الربح، المصروفات، اللي ليا وعليا، وأهم 3 حاجات أعملها", "مين العملاء اللي أحصّل منهم الأسبوع ده وأقول لكل واحد إيه؟", "أنهي مصروفات زادت وأوفّر فيها إزاي؟", "أنهي منتجات بتكسبني أكتر وأنهي بتخسرني؟"];
-const NO_RANGE: Partial<Record<Tab, boolean>> = { clients: true, suppliers: true, cash: true };
+const NO_RANGE: Partial<Record<Tab, boolean>> = { collections: true, clients: true, suppliers: true, cash: true };
 
 const tz = "Asia/Riyadh";
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
@@ -42,7 +43,8 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
   const [syncing, setSyncing] = useState(false);
   const [party, setParty] = useState<{ kind: PartyKind; name: string } | null>(null);
   const [editStart, setEditStart] = useState<string | null>(null);
-  const [aiOpen, setAiOpen] = useState(false); const asked: { q: string; n: number } | null = null;
+  const [aiOpen, setAiOpen] = useState(false); const [asked, setAsked] = useState<{ q: string; n: number } | null>(null);
+  const askAi = useCallback((q: string) => { setAiOpen(true); setAsked(a => ({ q, n: (a?.n || 0) + 1 })); }, []);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -123,6 +125,7 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
     {!d ? <div className="grid gap-3 sm:grid-cols-4">{[0, 1, 2, 3].map(i => <div key={i} className="h-28 animate-pulse rounded-2xl bg-[var(--card)]" />)}</div>
       : <div className={`transition-opacity ${loading ? "opacity-50" : ""}`}>
         {tab === "summary" && <Summary d={d} go={go} open={open} pickMonth={pickMonth} />}
+        {tab === "collections" && <Collections today={d.today} subdomain={subdomain} open={open} ask={askAi} />}
         {tab === "clients" && <Parties d={d} kind="client" open={open} x={x} />}
         {tab === "suppliers" && <Parties d={d} kind="supplier" open={open} x={x} />}
         {tab === "expenses" && <Expenses d={d} reload={load} pickMonth={pickMonth} />}

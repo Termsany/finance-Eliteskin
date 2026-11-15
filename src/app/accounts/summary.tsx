@@ -25,7 +25,15 @@ export function Summary({ d, go, open, pickMonth }: { d: AccData; go: (t: Tab) =
   const apWeek = d.ap.open.filter(o => o.due <= week).reduce((s, o) => s + o.unpaid, 0);
   const costs = d.monthly.map(m => ({ ...m, costs: Number(m.cogs) + Number(m.opex) }));
   const att = d.attention || [];
+  const c = d.collect;
   return <div className="space-y-4">
+    {c && <button type="button" onClick={() => go("collections")} className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 rounded-[22px] border border-[var(--border)] bg-[var(--card)] px-5 py-4 text-right transition hover:border-[var(--sky-border)] hover:shadow-lg">
+      <span><span className="block text-[13px] font-semibold text-[var(--muted)]">مطلوب تحصيله الشهر ده</span><b className="text-[24px] font-extrabold tabular-nums text-[var(--ink)]">{sar(c.required)}</b></span>
+      <span className="text-[13px]"><b className="block text-red-700">{sar(c.overdue)} متأخر</b><span className="text-[var(--muted)]">عند {c.overdue_parties} عميل</span></span>
+      <span className="text-[13px]"><b className="block text-amber-700">{sar(c.due)} في ميعاده</b><span className="text-[var(--muted)]">لحد {c.end}{c.week > 0 ? ` · ${sar(c.week)} الأسبوع ده` : ""}</span></span>
+      <span className="text-[13px]"><b className="block text-emerald-700">{sar(c.done)} اتحصّل</b><span className="text-[var(--muted)]">من أول الشهر</span></span>
+      <span className="mr-auto rounded-full bg-[var(--navy)] px-3.5 py-2 text-xs font-bold text-white">افتح التحصيل ‹</span>
+    </button>}
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Tile label="صافي الربح" value={sar(k.net)} tone={k.net < 0 ? "bad" : undefined} onClick={() => go("pnl")}
         sub={<>هامش {pct(k.net_margin)}{change(k.net, p?.net) !== null && <> · <Delta v={change(k.net, p?.net)} /> عن الفترة اللي فاتت</>}</>} />
