@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 
 /** Light / dark switch. The choice is per device (localStorage) and applied before first paint by THEME_BOOT. */
-export const THEME_BOOT = `try{var t=localStorage.getItem('es-theme');if(t==='dark')document.documentElement.dataset.theme='dark'}catch(e){}`;
+export const THEME_BOOT = `try{var t=localStorage.getItem('es-theme');if(t==='dark')document.documentElement.dataset.theme='dark';if(localStorage.getItem('es-sb')==='c')document.documentElement.dataset.sb='c'}catch(e){}`;
 
 export function ThemeToggle({ className = "", label = true }: { className?: string; label?: boolean }) {
   const [dark, setDark] = useState(false);
