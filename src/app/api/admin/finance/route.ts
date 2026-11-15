@@ -6,6 +6,7 @@ import { computeFinance, loadInput, riyadhToday } from "@/lib/finance";
 import { prevKpi, prevRange } from "@/lib/fin-ai";
 import { aiStatus } from "@/lib/ai-provider";
 import { attention } from "@/lib/fin-books";
+import { collectionPlan, monthEnd, receivedIn } from "@/lib/collections";
 
 const DAY = /^20\d\d-\d\d-\d\d$/;
 
@@ -27,5 +28,8 @@ export async function GET(req: Request) {
   const bs = fin.books_start || "";
   const docs = { total: inp.sales.length, before_start: bs ? inp.sales.filter(s => s.date < bs).length : 0, in_period: inp.sales.filter(s => s.date >= fin.period.from && s.date <= to).length };
   const todo = attention({ ar: fin.ar, ap: fin.ap, monthly: fin.monthly as Array<{ m: string; opex: number; sales: number; cogs: number }>, price_guard: fin.price_guard, stock_alerts: fin.stock_alerts, cost_coverage: fin.kpi.cost_coverage, today });
-  return NextResponse.json({ ...fin, docs, attention: todo, prev, link: null, ai: (await aiStatus()).configured, sync: { ...sync.rows[0], running: syncRunning() }, today });
+  // this month's collection at a glance (the full list is in the collections tab)
+  const cm = today.slice(0, 7), cp = collectionPlan(fin.ar.open, cm, today);
+  const collect = { ...cp.totals, month: cm, due_month: cp.totals.month, done: receivedIn(inp.payments, `${cm}-01`, today), end: monthEnd(cm) };
+  return NextResponse.json({ ...fin, docs, attention: todo, collect, prev, link: null, ai: (await aiStatus()).configured, sync: { ...sync.rows[0], running: syncRunning() }, today });
 }
