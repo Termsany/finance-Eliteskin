@@ -1,21 +1,33 @@
-import Link from "next/link";
-import { Icon } from "@/components/Icon";
+import { Suspense } from "react";
+import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { SidebarToggle } from "@/components/SidebarNav";
+import { SideMenu, MobileMenu } from "@/components/AppNav";
 
-/** Top bar for every signed-in page: brand, the two pages, theme and sign out. */
-export function Shell({ active, children }: { active: "/" | "/settings"; children: React.ReactNode }) {
-  const link = (href: "/" | "/settings", label: string, icon: string) => <Link href={href} aria-current={active === href ? "page" : undefined}
-    className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition ${active === href ? "bg-white/15 text-white" : "text-white/75 hover:bg-white/10 hover:text-white"}`}><Icon name={icon} size={16} />{label}</Link>;
-  return <div className="min-h-screen" dir="rtl">
-    <header className="sticky top-0 z-50 bg-[linear-gradient(180deg,#0d3a40_0%,#0b1d20_100%)] text-white shadow-lg">
-      <div className="mx-auto flex max-w-[1320px] flex-wrap items-center gap-2 px-4 py-2.5 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--sky)] text-[#0b1d20]"><Icon name="wallet" size={19} /></span>
-          <span className="leading-tight"><b className="block text-[15px]">المتابعة المالية</b><span className="text-[11px] text-white/60">Elite Skin</span></span></Link>
-        <nav className="mr-auto flex items-center gap-1">{link("/", "الحسابات", "dashboard")}{link("/settings", "الإعدادات", "pen")}</nav>
-        <ThemeToggle className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-2 text-xs font-bold hover:bg-white/20" />
-        <form action="/api/auth/logout" method="post"><button type="submit" className="rounded-full bg-white/10 px-3 py-2 text-xs font-bold hover:bg-white/20">خروج</button></form>
+/** Same frame as «الميدان»: dark sidebar on desktop, top bar + bottom tabs on phones. */
+export function Shell({ children }: { children: React.ReactNode }) {
+  return <div className="es-shell min-h-screen flex flex-col lg:flex-row" dir="rtl">
+    <aside className="es-sidebar hidden lg:flex shrink-0 flex-col text-white sticky top-0 h-screen">
+      <div className="es-head flex items-center justify-between gap-2">
+        <div className="es-hide"><Logo variant="lockup" tone="onDark" markSize={38} tagline="المتابعة المالية" /></div>
+        <div className="es-show-c"><Logo variant="mark" tone="onDark" markSize={40} /></div>
+        <SidebarToggle />
       </div>
-    </header>
-    <main className="mx-auto max-w-[1320px] px-4 py-5 sm:px-6 sm:py-6">{children}</main>
+      <Suspense fallback={null}><SideMenu /></Suspense>
+      <div className="es-user mt-auto rounded-2xl bg-white/[0.07] p-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--sky)] text-xs font-extrabold text-[#0b1d20]">ES</div>
+          <div className="es-hide min-w-0 flex-1"><div className="truncate text-sm font-bold">المالك</div><div className="truncate text-[11px] text-[var(--sky)]">المتابعة المالية</div></div>
+        </div>
+        <div className="es-hide mt-2 flex gap-1.5">
+          <ThemeToggle className="flex flex-1 items-center justify-center gap-1 rounded-full bg-white/10 py-2 text-xs font-bold transition hover:bg-white/20" />
+          <form action="/api/auth/logout" method="post" className="flex-1"><button type="submit" className="w-full rounded-full bg-white/10 py-2 text-xs font-bold transition hover:bg-white/20">تسجيل خروج</button></form>
+        </div>
+      </div>
+    </aside>
+    <div className="flex min-w-0 flex-1 flex-col">
+      <Suspense fallback={null}><MobileMenu /></Suspense>
+      <main className="es-page flex-1 p-4 pb-28 sm:p-5 sm:pb-28 lg:p-8 lg:pb-8">{children}</main>
+    </div>
   </div>;
 }

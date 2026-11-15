@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { daftraCfg } from "@/lib/settings";
@@ -12,8 +13,8 @@ export default async function Home() {
   if (!(await getCurrentUser())) redirect("/login");
   const cfg = await daftraCfg();
   if (cfg) await syncIfStale(60);
-  return <Shell active="/">
-    {cfg ? <AccountsHub subdomain={`${cfg.sub}.${cfg.domain}`} />
+  return <Shell>
+    {cfg ? <Suspense fallback={null}><AccountsHub subdomain={`${cfg.sub}.${cfg.domain}`} /></Suspense>
       : <div className="mx-auto max-w-xl rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 text-center">
         <h1 className="text-xl font-extrabold">أهلاً بيك في المتابعة المالية</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">عشان الأرقام تظهر، اربط البرنامج بحسابك في دفترة. البرنامج بيقرأ من دفترة بس، ومش بيعدّل فيها حاجة.</p>

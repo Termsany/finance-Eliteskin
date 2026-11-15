@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter, useSearchParams } from "next/navigation";
+import { tabLabel } from "@/lib/nav";
 import { Icon } from "@/components/Icon";
 import { useToast } from "@/components/Toast";
 import type { FinData } from "./types";
@@ -23,6 +25,10 @@ const TABS: Array<[Tab, string, string]> = [["summary", "الملخص", "dashboa
   ["pnl", "الأرباح والخسائر", "reports"], ["vat", "الضريبة", "file"], ["cash", "السيولة", "time"], ["products", "المنتجات والأسعار", "products"], ["audit", "مراجعة الحسابات", "check"]];
 const EXCEL: Partial<Record<Tab, string>> = { summary: "summary", clients: "ar", suppliers: "ap", expenses: "pnl", pnl: "pnl", vat: "summary", products: "pricing" };
 const CHIPS = ["لخّص لي وضع الفلوس في 5 سطور: الربح، المصروفات، اللي ليا وعليا، وأهم 3 حاجات أعملها", "مين العملاء اللي أحصّل منهم الأسبوع ده وأقول لكل واحد إيه؟", "أنهي مصروفات زادت وأوفّر فيها إزاي؟", "أنهي منتجات بتكسبني أكتر وأنهي بتخسرني؟"];
+const SUB: Partial<Record<Tab, string>> = { summary: "نظرة سريعة على فلوس الشركة — من دفترة", collections: "المطلوب تحصيله أو دفعه الشهر ده: المتأخر واللي في ميعاده",
+  clients: "اللي ليك عند العملاء وكشف حساب كل عميل", suppliers: "اللي عليك للموردين وكشف حساب كل مورد", expenses: "مصروفات دفترة ومصروفات البرنامج",
+  pnl: "قائمة الدخل شهر بشهر", vat: "ضريبة القيمة المضافة شهر بشهر", cash: "الفلوس الداخلة والخارجة في الـ 13 أسبوع الجايين",
+  products: "الأسعار والتكلفة والمخزون", audit: "فحوصات تلقائية على قيود دفترة" };
 const NO_RANGE: Partial<Record<Tab, boolean>> = { collections: true, clients: true, suppliers: true, cash: true };
 
 const tz = "Asia/Riyadh";
@@ -35,7 +41,9 @@ const ago = (iso: string | null) => { if (!iso) return "—"; const m = Math.rou
 
 export default function AccountsHub({ subdomain }: { subdomain: string }) {
   const toast = useToast();
-  const [tab, setTab] = useState<Tab>("summary");
+  const router = useRouter(), sp = useSearchParams();
+  const q = sp.get("tab") as Tab | null;
+  const tab: Tab = q && TABS.some(x => x[0] === (ALIAS[q] || q)) ? (ALIAS[q] || q) : "summary";
   const [preset, setPreset] = useState(0);
   const [range, setRange] = useState<[string, string]>(PRESETS[0][1]());
   const [d, setD] = useState<AccData | null>(null);
@@ -44,7 +52,7 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
   const [party, setParty] = useState<{ kind: PartyKind; name: string } | null>(null);
   const [editStart, setEditStart] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(false); const [asked, setAsked] = useState<{ q: string; n: number } | null>(null);
-  const askAi = useCallback((q: string) => { setAiOpen(true); setAsked(a => ({ q, n: (a?.n || 0) + 1 })); }, []);
+  const askAi = (q: string) => { setAiOpen(true); setAsked(a => ({ q, n: (a?.n || 0) + 1 })); };
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -57,14 +65,9 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
   }, [range, toast]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (!d?.sync?.running) return; const t = setTimeout(() => void load(), 6000); return () => clearTimeout(t); }, [d, load]);
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("tab") as Tab | null;
-    const ok = (t: string | null): t is Tab => !!t && TABS.some(x => x[0] === (ALIAS[t as Tab] || t));
-    if (ok(q)) { setTab(ALIAS[q] || q); return; }
-    try { const t = sessionStorage.getItem("acc-tab"); if (ok(t)) setTab(ALIAS[t] || t); } catch { /* ignore */ }
-  }, []);
-  const go = useCallback((t: Tab) => { const x = ALIAS[t] || t; setTab(x); try { sessionStorage.setItem("acc-tab", x); } catch { /* ignore */ } window.scrollTo({ top: 0, behavior: "smooth" }); }, []);
-  const open: Open = useCallback((kind, name) => setParty({ kind, name }), []);
+  // the menu (sidebar / bottom bar) and in-page links both move between sections through ?tab=
+  const go = useCallback((t: Tab) => { const x = ALIAS[t] || t; router.push(x === "summary" ? "/" : `/?tab=${x}`, { scroll: false }); window.scrollTo({ top: 0, behavior: "smooth" }); }, [router]);
+  const open: Open = (kind, name) => setParty({ kind, name });
   const pickMonth = (m: string) => { setPreset(-1); setRange([`${m}-01`, lastDay(m)]); };
 
   async function sync() {
@@ -83,8 +86,8 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
   return <div className="space-y-4 pb-20">
     {/* header */}
     <div className="flex flex-wrap items-start gap-3">
-      <div className="min-w-0 flex-1"><h1 className="text-2xl font-extrabold text-[var(--ink)]">الحسابات</h1>
-        <p className="mt-0.5 text-[12.5px] text-[var(--muted)]">مرجعك لكل الفلوس: عملاء، موردين، مصروفات، ربح وخسارة — من دفترة</p></div>
+      <div className="min-w-0 flex-1"><h1 className="text-2xl font-extrabold text-[var(--navy)]">{tabLabel(tab)}</h1>
+        <p className="mt-0.5 text-[12.5px] text-[var(--muted)]">{SUB[tab] || ""}</p></div>
       <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
         <Search open={open} subdomain={subdomain} />
         <button type="button" disabled={syncing} onClick={() => void sync()} className="flex items-center gap-1.5 rounded-full bg-[var(--navy)] px-3.5 py-2 text-xs font-bold text-white disabled:opacity-60"><span className={syncing ? "animate-spin" : ""}><Icon name="repeat" size={14} /></span>{syncing ? "جارٍ التحديث…" : "حدّث من دفترة"}</button>
@@ -110,12 +113,7 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
       <button type="button" onClick={() => setEditStart(d.books_start || "")} className="mr-1 underline">غيّر بداية الحسابات</button></div>}
     {d?.sync?.ok === false && <div className="rounded-xl bg-red-50 p-3 text-xs text-red-800 ring-1 ring-red-200">آخر تحديث من دفترة فشل: {d.sync.message}</div>}
 
-    {/* tabs + period */}
-    <div className="flex gap-1 overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5" role="tablist">
-      {TABS.map(([k, l, i]) => { const on = tab === k; const n = k === "summary" ? (d?.attention || []).filter(a => a.level === "danger").length : 0;
-        return <button key={k} type="button" role="tab" aria-selected={on} onClick={() => go(k)} className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition ${on ? "bg-[var(--navy)] text-white shadow" : "text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--navy)]"}`}>
-          <Icon name={i} size={15} />{l}{n > 0 && <span className="rounded-full bg-red-500 px-1.5 text-[10px] text-white">{n}</span>}</button>; })}
-    </div>
+    {/* period */}
     {!NO_RANGE[tab] && <div className="flex flex-wrap items-center gap-2">
       <div className="flex flex-wrap gap-1 rounded-xl bg-[var(--sky-light)] p-1">{PRESETS.map(([l, f], i) => <button key={l} type="button" onClick={() => { setPreset(i); setRange(f()); }} className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${preset === i ? "bg-[var(--card)] text-[var(--navy)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--navy)]"}`}>{l}</button>)}</div>
       <div className="flex items-center gap-1 text-xs"><input type="date" value={range[0]} max={range[1]} onChange={e => { setPreset(-1); setRange([e.target.value, range[1]]); }} className="rounded-lg border border-[var(--border)] px-2 py-1.5" /><span className="text-[var(--muted)]">←</span><input type="date" value={range[1]} min={range[0]} onChange={e => { setPreset(-1); setRange([range[0], e.target.value]); }} className="rounded-lg border border-[var(--border)] px-2 py-1.5" /></div>
@@ -137,7 +135,7 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
       </div>}
 
     {mounted && d && createPortal(<div dir="rtl">
-      {!aiOpen && <button type="button" onClick={() => setAiOpen(true)} aria-label="المستشار المالي" className="fixed bottom-5 left-4 z-[70] flex items-center gap-2 rounded-full bg-[var(--navy)] p-3.5 text-sm font-extrabold text-white shadow-2xl transition hover:-translate-y-0.5 sm:px-5"><Icon name="sparkle" size={18} /><span className="hidden sm:inline">المستشار المالي</span></button>}
+      {!aiOpen && <button type="button" onClick={() => setAiOpen(true)} aria-label="المستشار المالي" className="fixed bottom-24 left-4 z-[60] flex items-center gap-2 rounded-full bg-[var(--navy)] p-3.5 lg:bottom-6 text-sm font-extrabold text-white shadow-2xl transition hover:-translate-y-0.5 sm:px-5"><Icon name="sparkle" size={18} /><span className="hidden sm:inline">المستشار المالي</span></button>}
       {aiOpen && <button type="button" aria-label="إغلاق" onClick={() => setAiOpen(false)} className="fixed inset-0 z-[75] bg-[#0b1d20]/35 lg:hidden" />}
       <aside aria-hidden={!aiOpen} className={`fixed inset-y-0 left-0 z-[80] flex w-[min(460px,100vw)] flex-col bg-[var(--card)] shadow-2xl transition-transform duration-200 ${aiOpen ? "translate-x-0" : "invisible -translate-x-full"}`}>
         <div className="flex items-center justify-between gap-2 bg-[var(--navy)] px-4 py-3 text-white"><span className="flex items-center gap-2 font-extrabold"><Icon name="sparkle" size={18} />المستشار المالي</span>
