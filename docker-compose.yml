@@ -18,6 +18,7 @@ services:
 
   app:
     build: .
+    image: elite-finance-app
     restart: unless-stopped
     depends_on:
       db:
