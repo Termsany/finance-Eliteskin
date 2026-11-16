@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/session";
 import { query } from "@/lib/db";
 import { computeFinance, loadInput, riyadhToday } from "@/lib/finance";
 import { cashForecast } from "@/lib/fin-cash";
+import { openBySupplier } from "@/lib/offsets";
+import { loadOrders } from "@/lib/offsets-data";
 
 const forbid = () => NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -12,8 +14,9 @@ export async function GET(req: Request) {
   const fin = computeFinance(inp, `${today.slice(0, 7)}-01`, today);
   const s = (await query<{ cash_balance: number | null; cash_as_of: string | null }>("SELECT cash_balance::float8, cash_as_of::text FROM fin_settings WHERE id=1")).rows[0];
   const includeNew = new URL(req.url).searchParams.get("new") === "1";
+  const offsets = openBySupplier(await loadOrders().catch(() => []));
   return NextResponse.json({ today, cash_balance: s?.cash_balance ?? null, cash_as_of: s?.cash_as_of ?? null, vat_period: fin.kpi.vat_payable,
-    forecast: cashForecast(fin, inp, s?.cash_balance ?? 0, { includeNew }) });
+    forecast: cashForecast(fin, inp, s?.cash_balance ?? 0, { includeNew, offsets }) });
 }
 
 /** Opening cash (bank + treasury) entered by the admin — Daftra balances aren't mirrored. */

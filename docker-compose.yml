@@ -29,9 +29,12 @@ services:
       NODE_ENV: production
       TZ: Asia/Riyadh
       LEGACY_DATA_DIR: /app/legacy
+      BACKUP_DIR: /app/backups
     volumes:
       # بيانات النسخة الأولى (data/db.json) — بتتقري مرة واحدة بس عشان تنقل المصاريف والمفاتيح
       - ${LEGACY_DATA_PATH:-./data}:/app/legacy:ro
+      # النسخ الاحتياطية اليومية لبيانات البرنامج — بتفضل بعد إعادة التشغيل
+      - appbackups:/app/backups
     ports:
       - "127.0.0.1:3200:3200"
     healthcheck:
@@ -43,3 +46,4 @@ services:
 
 volumes:
   pgdata:
+  appbackups:

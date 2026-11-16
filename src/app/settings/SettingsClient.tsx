@@ -15,6 +15,7 @@ export default function SettingsClient() {
     <Books />
     <div className={box}><div className="mb-3 text-sm font-extrabold">المستشار المالي (الذكاء الاصطناعي)</div><AiPanel /></div>
     <Password />
+    <Backup />
     <div className={`${box} flex items-center justify-between gap-3`}>
       <div><div className="text-sm font-extrabold">المظهر</div><div className="mt-0.5 text-xs text-[var(--muted)]">الوضع الليلي أريح للعين بالليل. الاختيار بيتحفظ على الجهاز ده.</div></div>
       <ThemeToggle className="flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] px-4 py-2 text-sm font-bold text-[var(--navy)]" />
@@ -76,6 +77,14 @@ function Books() {
 function AiPanel() {
   const [k, setK] = useState(0);
   return <AiSetup key={k} onSaved={() => setK(k + 1)} />;
+}
+
+function Backup() {
+  return <div className={box}>
+    <div className="text-sm font-extrabold">نسخة احتياطية</div>
+    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">البرنامج بياخد نسخة تلقائية كل يوم على السيرفر (آخر 14 يوم). ده بيحفظ البيانات اللي اتسجلت في البرنامج نفسه: المصروفات، المقاصة والأسعار المتفق عليها، والإعدادات — بيانات دفترة بترجع لوحدها بالمزامنة. تقدر كمان تنزّل نسخة دلوقتي وتحتفظ بيها عندك.</p>
+    <a href="/api/admin/backup" className={`mt-3 inline-block ${btn}`}>تنزيل نسخة احتياطية الآن</a>
+  </div>;
 }
 
 function Password() {

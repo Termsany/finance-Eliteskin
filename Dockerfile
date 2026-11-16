@@ -20,6 +20,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/migrations ./migrations
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/migrate.mjs /app/scripts/import-legacy.mjs ./scripts/
+# writable dir for the daily backups volume (so the non-root user can write to it)
+RUN mkdir -p /app/backups && chown nextjs:nodejs /app/backups
 USER nextjs
 EXPOSE 3200
 CMD ["sh", "-c", "node scripts/migrate.mjs && node scripts/import-legacy.mjs; node server.js"]

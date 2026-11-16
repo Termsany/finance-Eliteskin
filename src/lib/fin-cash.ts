@@ -3,6 +3,7 @@ import type { computeFinance, Input } from "@/lib/finance";
 /** 13-week cash-flow forecast. Conservative: only what is already invoiced, plus (optionally) a share of new sales. Pure. */
 type Fin = ReturnType<typeof computeFinance>;
 const r0 = (n: number) => Math.round(n);
+const r2c = (n: number) => Math.round(n * 100) / 100;
 const DAY = 864e5;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 const t0 = (d: string) => Date.parse(`${d}T00:00:00Z`);
@@ -10,7 +11,9 @@ const t0 = (d: string) => Date.parse(`${d}T00:00:00Z`);
 /** Chance an overdue invoice is actually collected in the next few weeks (industry rule of thumb). */
 export function collectChance(daysLate: number) { return daysLate <= 0 ? 0.95 : daysLate <= 30 ? 0.8 : daysLate <= 60 ? 0.6 : daysLate <= 90 ? 0.4 : 0.2; }
 
-export function cashForecast(fin: Fin, inp: Pick<Input, "fixed" | "today">, opening: number, opts: { includeNew: boolean; weeks?: number } = { includeNew: false }) {
+export function cashForecast(fin: Fin, inp: Pick<Input, "fixed" | "today">, opening: number, opts: { includeNew: boolean; weeks?: number; offsets?: Record<string, number> } = { includeNew: false }) {
+  // supplier offsets owed to us (price differences the supplier will deduct): credit per supplier, used oldest-first
+  const credit: Record<string, number> = { ...(opts.offsets || {}) };
   const W = opts.weeks || 13;
   // weeks start Sunday (Saudi work week)
   const today = t0(inp.today), dow = new Date(today).getUTCDay(), start = today - dow * DAY;
@@ -25,11 +28,15 @@ export function cashForecast(fin: Fin, inp: Pick<Input, "fixed" | "today">, open
     else { const w = weekOf(o.due); if (w !== null) weeks[w].in_ar += v; }
     if (v >= 1000) { const w = o.days > 0 ? 0 : weekOf(o.due); if (w !== null) weeks[w].items.push({ kind: "in", label: `${o.party} · ${o.no}${o.days > 0 ? ` (متأخر ${o.days} يوم — محسوب ${Math.round(p * 100)}%${o.days > 0 ? " على 4 أسابيع" : ""})` : ""}`, amount: r0(v) }); }
   }
-  // payables (you owe the full amount)
-  for (const o of fin.ap.open) {
-    if (o.days > 0) spread(o.unpaid, 4, (w, x) => { weeks[w].out_ap += x; });
-    else { const w = weekOf(o.due); if (w !== null) weeks[w].out_ap += o.unpaid; }
-    if (o.unpaid >= 1000) { const w = o.days > 0 ? 0 : weekOf(o.due); if (w !== null) weeks[w].items.push({ kind: "out", label: `${o.party} · ${o.no}${o.days > 0 ? ` (متأخر ${o.days} يوم — موزع على 4 أسابيع)` : ""}`, amount: r0(o.unpaid) }); }
+  // payables (you owe the full amount), netted by any offset credit owed to us by that supplier (oldest invoice first)
+  for (const o of [...fin.ap.open].sort((a, b) => a.due.localeCompare(b.due))) {
+    let pay = o.unpaid;
+    const c = credit[o.party] || 0;
+    if (c > 0) { const used = Math.min(c, pay); credit[o.party] = r2c(c - used); pay = r2c(pay - used); }
+    if (pay <= 0) continue;
+    if (o.days > 0) spread(pay, 4, (w, x) => { weeks[w].out_ap += x; });
+    else { const w = weekOf(o.due); if (w !== null) weeks[w].out_ap += pay; }
+    if (pay >= 1000) { const w = o.days > 0 ? 0 : weekOf(o.due); if (w !== null) weeks[w].items.push({ kind: "out", label: `${o.party} · ${o.no}${o.unpaid !== pay ? " (بعد المقاصة)" : ""}${o.days > 0 ? ` (متأخر ${o.days} يوم — موزع على 4 أسابيع)` : ""}`, amount: r0(pay) }); }
   }
   // fixed monthly costs, paid on the 27th
   const fixedMonthly = inp.fixed.reduce((s, f) => s + f.monthly_amount, 0);
@@ -54,6 +61,9 @@ export function cashForecast(fin: Fin, inp: Pick<Input, "fixed" | "today">, open
     return { ...w, in_ar: r0(w.in_ar), in_new: r0(w.in_new), out_ap: r0(w.out_ap), out_fixed: r0(w.out_fixed), out_var: r0(w.out_var), net: r0(inn - out), balance: r0(bal), items: w.items.sort((a, b) => b.amount - a.amount).slice(0, 8) };
   });
   const tot = rows.reduce((s, r) => ({ in: s.in + r.in_ar + r.in_new, out: s.out + r.out_ap + r.out_fixed + r.out_var }), { in: 0, out: 0 });
+  const offTotal = Object.values(opts.offsets || {}).reduce((s, v) => s + v, 0);
+  const offLeft = Object.values(credit).reduce((s, v) => s + v, 0);
   return { opening: r0(opening), rows, total_in: r0(tot.in), total_out: r0(tot.out), closing: r0(bal), lowest: { balance: r0(low.balance), week: low.week }, first_negative_week: firstNeg,
-    assumptions: { fixed_monthly: r0(fixedUse), fixed_source: fixedMonthly > 0 ? "list" : "average", variable_monthly: r0(fixedMonthly > 0 ? variableMonthly : 0), include_new: opts.includeNew, new_weekly: B ? r0(B.sales_gross / 4.33 * 0.8) : 0 } };
+    assumptions: { fixed_monthly: r0(fixedUse), fixed_source: fixedMonthly > 0 ? "list" : "average", variable_monthly: r0(fixedMonthly > 0 ? variableMonthly : 0), include_new: opts.includeNew, new_weekly: B ? r0(B.sales_gross / 4.33 * 0.8) : 0,
+      offsets_applied: r0(offTotal - offLeft) } };
 }
