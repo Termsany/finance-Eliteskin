@@ -193,7 +193,7 @@ function OrderForm({ order, d, onClose, reload, toast }: { order: OffsetOrder | 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="المورد"><input list="off-sup" value={supplier} onChange={e => setSupplier(e.target.value)} className={inp} placeholder="اسم المورد" /></Field>
-          <Field label="العميل"><input list="off-cli" value={client} onChange={e => setClient(e.target.value)} className={inp} placeholder="العميل اللي المورد بيطبع له" /></Field>
+          <Field label="العميل"><input list="off-cli" value={client} onChange={e => setClient(e.target.value)} className={inp} placeholder="اكتب أي اسم — مش لازم يكون في دفترة" /></Field>
           <Field label="تاريخ الطباعة"><input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp} /></Field>
           <Field label="رقم فاتورة المورد (اختياري)"><input value={ref} onChange={e => setRef(e.target.value)} className={inp} placeholder="للرجوع إليها" /></Field>
         </div>
