@@ -60,39 +60,40 @@ export function reminderText(g: Pick<Group, "party" | "total" | "overdue" | "row
 }
 
 /* ───────── month by month ───────── */
-export type Bucket = { key: string; label: string; amount: number; invoices: number; parties: number };
+/** `overdue` = the part of the amount that is already late (only the current month carries it). */
+export type Bucket = { key: string; label: string; amount: number; overdue: number; invoices: number; parties: number };
 export type PartyLine = { party: string; total: number; overdue: number; selected: number; after: number; oldest: number; next_due: string | null; rows: Row[] };
 
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 export const monthLabel = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
 export const addMonths = (m: string, n: number) => { const [y, mo] = m.split("-").map(Number); const d = new Date(Date.UTC(y, mo - 1 + n, 1)); return d.toISOString().slice(0, 7); };
 
-/** Which bucket an open document belongs to: "overdue" (due before today), a month "YYYY-MM", or "later". */
+/** Which month an open document has to be collected in: overdue always goes to the current month; past the horizon = "later". */
 export function bucketOf(due: string, today: string, horizon: string) {
-  if (due < today) return "overdue";
+  if (due < today) return today.slice(0, 7);
   const m = due.slice(0, 7);
   return m <= horizon ? m : "later";
 }
 
 /**
- * The open documents split into: overdue, this month and the next `ahead` months (each month only
- * what falls due in it), and everything later. `sel` picks one bucket; every party with money in it gets
- * its full open balance, the overdue part, the part in the selected bucket and what comes after it.
+ * The open documents split into this month and the next `ahead` months, then "later". Overdue money is always
+ * collected in the current month (and shown as overdue there); a future month holds only what falls due in it.
+ * `sel` picks one bucket; every party gets its full open balance, the overdue part, the selected part and what comes after.
  */
 export function monthlyPlan(docs: OpenDoc[], today: string, sel: string, ahead = 5) {
   const cur = today.slice(0, 7), horizon = addMonths(cur, ahead);
-  const keys = ["overdue", ...Array.from({ length: ahead + 1 }, (_, i) => addMonths(cur, i)), "later"];
+  const keys = [...Array.from({ length: ahead + 1 }, (_, i) => addMonths(cur, i)), "later"];
   const rows: Row[] = docs.filter(d => d.unpaid > 0).map(d => {
     const days = Math.round((t(today) - t(d.due)) / DAY);
     const status: Status = d.due < today ? "overdue" : days > -7 ? "week" : "month";
     return { ...d, status, days };
   }).sort((a, b) => a.due.localeCompare(b.due) || b.unpaid - a.unpaid);
   const keyOf = (r: Row) => bucketOf(r.due, today, horizon);
+  const add = (rs: Row[]) => r2(rs.reduce((s, r) => s + r.unpaid, 0));
   const buckets: Bucket[] = keys.map(k => { const rs = rows.filter(r => keyOf(r) === k);
-    return { key: k, label: k === "overdue" ? "متأخر" : k === "later" ? "بعد كده" : monthLabel(k), amount: r2(rs.reduce((s, r) => s + r.unpaid, 0)), invoices: rs.length, parties: new Set(rs.map(r => r.party)).size }; });
+    return { key: k, label: k === "later" ? "بعد كده" : monthLabel(k), amount: add(rs), overdue: add(rs.filter(r => r.status === "overdue")), invoices: rs.length, parties: new Set(rs.map(r => r.party)).size }; });
   const selKey = keys.includes(sel) ? sel : cur;
-  // "after" = due later than the selected bucket (for "overdue": everything not yet due)
-  const isAfter = (r: Row) => selKey === "overdue" ? r.due >= today : selKey === "later" ? false : keyOf(r) !== "overdue" && (keyOf(r) === "later" || keyOf(r) > selKey);
+  const isAfter = (r: Row) => selKey !== "later" && (keyOf(r) === "later" || keyOf(r) > selKey);
   const by = new Map<string, PartyLine>();
   for (const r of rows) {
     const p = by.get(r.party) || { party: r.party, total: 0, overdue: 0, selected: 0, after: 0, oldest: 0, next_due: null, rows: [] };
@@ -103,12 +104,13 @@ export function monthlyPlan(docs: OpenDoc[], today: string, sel: string, ahead =
   }
   const parties = [...by.values()].map(p => ({ ...p, total: r2(p.total), overdue: r2(p.overdue), selected: r2(p.selected), after: r2(p.after) }))
     .sort((a, b) => b.selected - a.selected || b.total - a.total);
-  const sum = (f: (p: PartyLine) => number, list = parties) => r2(list.reduce((s, p) => s + f(p), 0));
-  const inSel = parties.filter(p => p.selected > 0);
+  const sum = (f: (p: PartyLine) => number) => r2(parties.reduce((s, p) => s + f(p), 0));
+  const b = buckets.find(x => x.key === selKey)!;
   return {
-    today, current: cur, sel: selKey, label: buckets.find(b => b.key === selKey)!.label, buckets, parties,
-    totals: { open: sum(p => p.total), overdue: sum(p => p.overdue), selected: sum(p => p.selected), parties_selected: inSel.length,
-      // what has to come in by the end of the selected month: overdue + every month up to it
-      by_end: selKey === "overdue" ? sum(p => p.overdue) : selKey === "later" ? sum(p => p.total) : r2(buckets.filter(b => b.key === "overdue" || (b.key !== "later" && b.key <= selKey)).reduce((s, b) => s + b.amount, 0)) },
+    today, current: cur, sel: selKey, label: b.label, buckets, parties,
+    totals: { open: sum(p => p.total), overdue: sum(p => p.overdue), selected: b.amount, selected_overdue: b.overdue, selected_due: r2(b.amount - b.overdue),
+      parties_selected: parties.filter(p => p.selected > 0).length,
+      // what has to come in by the end of the selected month: the current month (with the overdue) + every month up to it
+      by_end: selKey === "later" ? sum(p => p.total) : r2(buckets.filter(x => x.key !== "later" && x.key <= selKey).reduce((s, x) => s + x.amount, 0)) },
   };
 }

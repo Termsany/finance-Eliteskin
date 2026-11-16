@@ -2,7 +2,7 @@ import { computeFinance, loadInput, riyadhToday } from "@/lib/finance";
 import { monthlyPlan, receivedIn } from "@/lib/collections";
 
 export type Kind = "client" | "supplier";
-/** A bucket key: "overdue", "later" or a month YYYY-MM. */
+/** A bucket key: a month YYYY-MM or "later" ("overdue" is still accepted and means the current month). */
 export const SEL = /^(overdue|later|20\d\d-(0[1-9]|1[0-2]))$/;
 
 /** Everything the collections tab and the PDF report show: month buckets and every customer's amounts for one of them. */
