@@ -18,7 +18,12 @@ export function Parties({ d, kind, open, x }: { d: AccData; kind: PartyKind; ope
   const dueWeek = b.open.filter(o => o.due <= week).reduce((s, o) => s + o.unpaid, 0);
   const rows = (bk ? b.parties.filter(p => p.b[bk] > 0) : b.parties) as Array<(typeof b.parties)[number] & Record<string, unknown>>;
   const isC = kind === "client";
+  const off = !isC && d.offsets && d.offsets.open > 0 ? d.offsets : null;
   return <div className="space-y-4">
+    {off && <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl bg-emerald-50 px-4 py-3 text-[13px] ring-1 ring-emerald-200">
+      <span className="font-bold text-emerald-900">فروق أسعار ليك عند الموردين (مقاصة): <b className="tabular-nums">{sar(off.open)}</b></span>
+      <span className="text-emerald-800">الصافي اللي هتدفعه فعلاً: <b className="tabular-nums">{sar(b.total - off.open)}</b></span>
+      <span className="mr-auto text-[11.5px] text-emerald-700">تتابعها في تبويب «مقاصة الموردين»</span></div>}
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Tile label={isC ? "إجمالي ليك عند العملاء" : "إجمالي عليك للموردين"} value={sar(b.total)} sub={`${b.parties.length} ${isC ? "عميل" : "مورد"} · ${b.open.length} فاتورة مفتوحة`} />
       <Tile label="فات ميعاده" value={sar(b.overdue)} tone={b.overdue > 0 ? "bad" : undefined} sub={b.total ? `${Math.round(b.overdue / b.total * 100)}% من الإجمالي` : "—"} />

@@ -7,6 +7,8 @@ import { prevKpi, prevRange } from "@/lib/fin-ai";
 import { aiStatus } from "@/lib/ai-provider";
 import { attention } from "@/lib/fin-books";
 import { collectionPlan, monthEnd, receivedIn } from "@/lib/collections";
+import { openBySupplier } from "@/lib/offsets";
+import { loadOrders } from "@/lib/offsets-data";
 
 const DAY = /^20\d\d-\d\d-\d\d$/;
 
@@ -31,5 +33,9 @@ export async function GET(req: Request) {
   // this month's collection at a glance (the full list is in the collections tab)
   const cm = today.slice(0, 7), cp = collectionPlan(fin.ar.open, cm, today);
   const collect = { ...cp.totals, month: cm, due_month: cp.totals.month, done: receivedIn(inp.payments, `${cm}-01`, today), end: monthEnd(cm) };
-  return NextResponse.json({ ...fin, docs, attention: todo, collect, prev, link: null, ai: (await aiStatus()).configured, sync: { ...sync.rows[0], running: syncRunning() }, today });
+  // supplier offsets owed to us (price differences not yet deducted) — used to show the real net on the supplier pages
+  const offOrders = await loadOrders().catch(() => []);
+  const offMap = openBySupplier(offOrders);
+  const offsets = { open: Math.round(Object.values(offMap).reduce((s, v) => s + v, 0) * 100) / 100, bySupplier: offMap };
+  return NextResponse.json({ ...fin, docs, attention: todo, collect, offsets, prev, link: null, ai: (await aiStatus()).configured, sync: { ...sync.rows[0], running: syncRunning() }, today });
 }
