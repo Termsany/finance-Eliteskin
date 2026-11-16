@@ -22,10 +22,13 @@ export default async function CollectionsReport({ searchParams }: { searchParams
   const sum = (f: (p: (typeof list)[number]) => number) => list.reduce((s, p) => s + f(p), 0);
   const sync = (await query<{ finished_at: string | null }>("SELECT finished_at::text FROM daftra_sync WHERE id=1").catch(() => ({ rows: [] }))).rows[0]?.finished_at;
   const fmt = (x: Date | string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Asia/Riyadh", ...o }).format(new Date(x));
-  const selName = d.sel === "overdue" ? "المتأخر" : d.sel === "later" ? "بعد 6 شهور" : d.label;
-  const colSel = d.sel === "overdue" ? "المتأخر" : `مطلوب في ${d.sel === "later" ? "بعد كده" : d.label.split(" ")[0]}`;
-  const tiles: Array<[string, number, string]> = [[`${isC ? "مطلوب تحصيله" : "مطلوب دفعه"} — ${selName}`, d.totals.selected, C.navy], ["المتأخر كله", d.totals.overdue, C.red],
-    ...(d.sel !== "overdue" && d.sel !== "later" ? [[`لحد آخر ${d.label.split(" ")[0]}`, d.totals.by_end, C.amber] as [string, number, string]] : []), [`إجمالي المفتوح على ${isC ? "العملاء" : "الموردين"}`, d.totals.open, C.ink]];
+  const isCur = d.sel === d.current, mon = d.label.split(" ")[0];
+  const selName = d.sel === "later" ? "بعد 6 شهور" : d.label;
+  const colSel = `مطلوب في ${d.sel === "later" ? "بعد كده" : mon}`;
+  const tiles: Array<[string, number, string]> = [[`${isC ? "مطلوب تحصيله" : "مطلوب دفعه"} — ${selName}`, d.totals.selected, C.navy],
+    [isCur ? "منه متأخر (فات ميعاده)" : `متأخر (محسوب على ${d.buckets[0].label.split(" ")[0]})`, d.totals.overdue, C.red],
+    ...(isCur ? [[`ميعاده في ${mon}`, d.totals.selected_due, C.amber] as [string, number, string]] : d.sel !== "later" ? [[`لحد آخر ${mon}`, d.totals.by_end, C.amber] as [string, number, string]] : []),
+    [`إجمالي المفتوح على ${isC ? "العملاء" : "الموردين"}`, d.totals.open, C.ink]];
   const months = d.buckets.filter(b => b.amount > 0);
 
   return <div dir="rtl" className="report-root">
@@ -63,7 +66,7 @@ export default async function CollectionsReport({ searchParams }: { searchParams
 
       <b style={{ fontSize: "12.5pt" }}>المبلغ على كل {who}</b>
       {!list.length ? <p style={{ textAlign: "center", color: C.muted, padding: 24 }}>مفيش مبالغ في {selName}.</p> :
-        <table style={{ marginTop: 6 }}><thead><tr><th style={{ width: 26 }}>#</th><th>{who}</th><th className="n">{colSel}</th><th className="n">متأخر</th><th className="n">بعد كده</th><th className="n">إجمالي اللي عليه</th></tr></thead>
+        <table style={{ marginTop: 6 }}><thead><tr><th style={{ width: 26 }}>#</th><th>{who}</th><th className="n">{colSel}</th><th className="n">{isCur ? "منه متأخر" : "متأخر"}</th><th className="n">بعد كده</th><th className="n">إجمالي اللي عليه</th></tr></thead>
           <tbody>{list.map((p, i) => <tr key={p.party}>
             <td style={{ color: C.muted }}>{i + 1}</td>
             <td><b>{p.party}</b><div style={{ fontSize: "8.5pt", color: C.muted }}>{p.overdue ? `أقدم تأخير ${p.oldest} يوم` : p.next_due ? `أول استحقاق ${p.next_due}` : ""} · {p.rows.length} فاتورة</div></td>
@@ -76,8 +79,9 @@ export default async function CollectionsReport({ searchParams }: { searchParams
 
       {months.length > 0 && <div style={{ marginTop: 16, breakInside: "avoid" }}>
         <b style={{ fontSize: "11.5pt" }}>شهر بشهر</b>
-        <table style={{ marginTop: 6 }}><thead><tr>{months.map(b => <th key={b.key} className="n" style={{ color: b.key === "overdue" ? C.red : C.muted }}>{b.label}</th>)}</tr></thead>
-          <tbody><tr>{months.map(b => <td key={b.key} className="n" style={{ fontWeight: b.key === d.sel ? 800 : 600, color: b.key === "overdue" ? C.red : b.key === d.sel ? C.navy : C.ink, background: b.key === d.sel ? "#eaf6f4" : undefined }}>{k(b.amount)}</td>)}</tr></tbody></table>
+        <table style={{ marginTop: 6 }}><thead><tr>{months.map(b => <th key={b.key} className="n">{b.label}</th>)}</tr></thead>
+          <tbody><tr>{months.map(b => <td key={b.key} className="n" style={{ fontWeight: b.key === d.sel ? 800 : 600, color: b.key === d.sel ? C.navy : C.ink, background: b.key === d.sel ? "#eaf6f4" : undefined }}>{k(b.amount)}
+            {b.overdue > 0 && <div style={{ fontSize: "8pt", color: C.red, fontWeight: 700 }}>منه {k(b.overdue)} متأخر</div>}</td>)}</tr></tbody></table>
       </div>}
 
       {withInv && list.length > 0 && <div style={{ marginTop: 18 }}>
@@ -91,7 +95,7 @@ export default async function CollectionsReport({ searchParams }: { searchParams
       </div>}
 
       <div style={{ marginTop: 18, paddingTop: 8, borderTop: `1px solid ${C.border}`, fontSize: "8.5pt", color: C.muted }}>
-        الأرقام من دفترة{sync ? ` (آخر مزامنة ${fmt(sync, { dateStyle: "short", timeStyle: "short" })})` : ""} وشاملة الضريبة. الاستحقاق = تاريخ الفاتورة + مدة السداد في دفترة. الشهور الجاية من الفواتير المتسجلة بس.
+        الأرقام من دفترة{sync ? ` (آخر مزامنة ${fmt(sync, { dateStyle: "short", timeStyle: "short" })})` : ""} وشاملة الضريبة. الاستحقاق = تاريخ الفاتورة + مدة السداد في دفترة. المتأخر محسوب على الشهر الحالي. الشهور الجاية من الفواتير المتسجلة بس.
       </div>
     </div>
   </div>;

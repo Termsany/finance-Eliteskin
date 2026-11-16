@@ -39,24 +39,26 @@ describe("month by month", () => {
     d({ id: 4, party: "ب", due: "2027-01-15", unpaid: 300 }),    // January
     d({ id: 5, party: "ج", due: "2027-09-01", unpaid: 900 }),    // beyond the horizon
   ];
-  it("buckets: overdue, each month on its own, later", () => {
+  it("buckets: overdue is collected in the current month, each later month on its own", () => {
     const p = monthlyPlan(docs, "2026-11-15", "2026-11");
     const amt = Object.fromEntries(p.buckets.map(b => [b.key, b.amount]));
-    expect(amt).toMatchObject({ overdue: 1000, "2026-11": 500, "2026-12": 400, "2027-01": 300, later: 900 });
-    expect(p.buckets).toHaveLength(8);
-    expect(p.totals).toMatchObject({ open: 3100, overdue: 1000, selected: 500, parties_selected: 1, by_end: 1500 });
+    expect(amt).toMatchObject({ "2026-11": 1500, "2026-12": 400, "2027-01": 300, later: 900 });
+    expect(p.buckets).toHaveLength(7);
+    expect(p.buckets[0]).toMatchObject({ overdue: 1000, parties: 2 });
+    expect(p.buckets[1].overdue).toBe(0);
+    expect(p.totals).toMatchObject({ open: 3100, overdue: 1000, selected: 1500, selected_overdue: 1000, selected_due: 500, parties_selected: 2, by_end: 1500 });
+    expect(p.parties.find(x => x.party === "أ")).toMatchObject({ selected: 1000, overdue: 1000, after: 400 });
   });
-  it("per customer: full balance, overdue, the selected month and what comes after", () => {
+  it("a future month: only its own dues; overdue stays in the current month", () => {
     const p = monthlyPlan(docs, "2026-11-15", "2026-12");
     const a = p.parties.find(x => x.party === "أ")!, b = p.parties.find(x => x.party === "ب")!;
     expect(a).toMatchObject({ total: 1400, overdue: 1000, selected: 400, after: 0 });
     expect(b).toMatchObject({ total: 800, overdue: 0, selected: 0, after: 300 });
-    expect(p.totals.by_end).toBe(1900);
+    expect(p.totals).toMatchObject({ selected: 400, selected_overdue: 0, by_end: 1900 });
   });
-  it("overdue bucket, helpers", () => {
-    const p = monthlyPlan(docs, "2026-11-15", "overdue");
-    expect(p.parties.find(x => x.party === "أ")).toMatchObject({ selected: 1000, after: 400 });
-    expect(bucketOf("2026-11-14", "2026-11-15", "2027-04")).toBe("overdue");
+  it("old 'overdue' selection falls back to the current month, helpers", () => {
+    expect(monthlyPlan(docs, "2026-11-15", "overdue").sel).toBe("2026-11");
+    expect(bucketOf("2026-11-14", "2026-11-15", "2027-04")).toBe("2026-11");
     expect(addMonths("2026-11", 2)).toBe("2027-01");
   });
 });
