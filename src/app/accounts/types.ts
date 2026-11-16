@@ -6,5 +6,6 @@ export type FinData = ReturnType<typeof computeFinance> & {
   docs?: { total: number; before_start: number; in_period: number };
   collect?: { month: string; required: number; overdue: number; week: number; due: number; overdue_parties: number; done: number; end: string };
   offsets?: { open: number; bySupplier: Record<string, number> };
+  budget?: import("@/lib/budget").Budget;
   sync: { started_at: string | null; finished_at: string | null; ok: boolean | null; message: string; invoices?: number; running: boolean }; today: string;
 };

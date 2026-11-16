@@ -53,7 +53,8 @@ function Daftra() {
 function Books() {
   const toast = useToast();
   const [v, setV] = useState<string | null>(null); const [gm, setGm] = useState(45); const [nm, setNm] = useState(15);
-  useEffect(() => { fetch("/api/admin/finance/settings", { cache: "no-store" }).then(r => r.json()).then(j => { setV(j.books_start || ""); if (j.target_gross_margin) setGm(j.target_gross_margin); if (j.target_net_margin !== undefined) setNm(j.target_net_margin); }).catch(() => {}); }, []);
+  const [st, setSt] = useState(""); const [pt, setPt] = useState("");
+  useEffect(() => { fetch("/api/admin/finance/settings", { cache: "no-store" }).then(r => r.json()).then(j => { setV(j.books_start || ""); if (j.target_gross_margin) setGm(j.target_gross_margin); if (j.target_net_margin !== undefined) setNm(j.target_net_margin); setSt(j.monthly_sales_target != null ? String(j.monthly_sales_target) : ""); setPt(j.monthly_profit_target != null ? String(j.monthly_profit_target) : ""); }).catch(() => {}); }, []);
   async function put(body: object, ok: string) {
     const r = await fetch("/api/admin/finance/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => null); if (r.ok) toast(ok, "success"); else toast(j?.error || "تعذر الحفظ", "error");
@@ -71,6 +72,15 @@ function Books() {
       <label><span className={lbl}>صافي الربح المستهدف %</span><input type="number" min={0} max={60} value={nm} onChange={e => setNm(Number(e.target.value))} className={inp} /></label>
     </div>
     <button type="button" onClick={() => void put({ target_gross_margin: gm, target_net_margin: nm }, "اتحفظت الأهداف")} className={`mt-3 ${btn}`}>حفظ الأهداف</button>
+    <div className="mt-5 border-t border-[var(--border)] pt-4">
+      <div className="text-sm font-extrabold">هدف الشهر</div>
+      <p className="mt-1 text-xs leading-5 text-[var(--muted)]">المبلغ اللي عايز تبيعه وتكسبه صافي في الشهر. بيظهر في الملخص «ماشي على الهدف ولا لأ» حسب اليوم في الشهر. سيبه فاضي لو مش عايز هدف.</p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <label><span className={lbl}>مبيعات الشهر المستهدفة (ر.س)</span><input value={st} onChange={e => setSt(e.target.value)} inputMode="decimal" dir="ltr" placeholder="مثلاً 500000" className={inp} /></label>
+        <label><span className={lbl}>صافي ربح الشهر المستهدف (ر.س)</span><input value={pt} onChange={e => setPt(e.target.value)} inputMode="decimal" dir="ltr" placeholder="مثلاً 75000" className={inp} /></label>
+      </div>
+      <button type="button" onClick={() => void put({ monthly_sales_target: st === "" ? null : Number(st.replace(/,/g, "")), monthly_profit_target: pt === "" ? null : Number(pt.replace(/,/g, "")) }, "اتحفظ هدف الشهر")} className={`mt-3 ${btn}`}>حفظ هدف الشهر</button>
+    </div>
   </div>;
 }
 
