@@ -6,6 +6,7 @@ export const NAV: NavItem[] = [
   { href: "/?tab=collections", tab: "collections", label: "التحصيل", icon: "time", group: "primary", mobile: true },
   { href: "/?tab=clients", tab: "clients", label: "العملاء", icon: "doctors", group: "primary", mobile: true },
   { href: "/?tab=suppliers", tab: "suppliers", label: "الموردين", icon: "send", group: "primary" },
+  { href: "/?tab=offsets", tab: "offsets", label: "مقاصة الموردين", icon: "repeat", group: "primary" },
   { href: "/?tab=expenses", tab: "expenses", label: "المصروفات", icon: "wallet", group: "primary", mobile: true },
   { href: "/?tab=pnl", tab: "pnl", label: "الأرباح والخسائر", icon: "reports", group: "primary" },
   { href: "/?tab=cash", tab: "cash", label: "السيولة", icon: "calendar", group: "primary" },

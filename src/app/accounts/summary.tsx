@@ -39,8 +39,8 @@ export function Summary({ d, go, open, pickMonth }: { d: AccData; go: (t: Tab) =
         sub={<>هامش {pct(k.net_margin)}{change(k.net, p?.net) !== null && <> · <Delta v={change(k.net, p?.net)} /> عن الفترة اللي فاتت</>}</>} />
       <Tile label="ليك عند العملاء" value={sar(d.ar.total)} tone={undefined} onClick={() => go("clients")}
         sub={d.ar.overdue > 0 ? <span className="text-red-700">منها {sar(d.ar.overdue)} متأخر</span> : "مفيش متأخرات"} hint="شامل الضريبة، لحد النهارده — مش مرتبط بالفترة" />
-      <Tile label="عليك للموردين" value={sar(d.ap.total)} onClick={() => go("suppliers")}
-        sub={apWeek > 0 ? <span className="text-amber-700">منها {sar(apWeek)} مستحقة الأسبوع ده</span> : d.ap.total ? "مفيش مستحق الأسبوع ده" : "مفيش مستحقات"} />
+      <Tile label="عليك للموردين" value={sar(d.ap.total)} onClick={() => go(d.offsets && d.offsets.open > 0 ? "offsets" : "suppliers")}
+        sub={d.offsets && d.offsets.open > 0 ? <span className="text-emerald-700">ليك مقاصة {sar(d.offsets.open)} · الصافي {sar(d.ap.total - d.offsets.open)}</span> : apWeek > 0 ? <span className="text-amber-700">منها {sar(apWeek)} مستحقة الأسبوع ده</span> : d.ap.total ? "مفيش مستحق الأسبوع ده" : "مفيش مستحقات"} />
       <Tile label="المصروفات" value={sar(k.opex)} onClick={() => go("expenses")}
         sub={<>{k.sales ? `${pct(k.opex / k.sales * 100)} من المبيعات` : "—"}{change(k.opex, p?.opex) !== null && <> · <Delta v={change(k.opex, p?.opex)} inverse /></>}</>} />
     </div>
