@@ -9,6 +9,7 @@ import { attention } from "@/lib/fin-books";
 import { collectionPlan, monthEnd, receivedIn } from "@/lib/collections";
 import { openBySupplier } from "@/lib/offsets";
 import { loadOrders } from "@/lib/offsets-data";
+import { computeBudget } from "@/lib/budget";
 
 const DAY = /^20\d\d-\d\d-\d\d$/;
 
@@ -33,9 +34,15 @@ export async function GET(req: Request) {
   // this month's collection at a glance (the full list is in the collections tab)
   const cm = today.slice(0, 7), cp = collectionPlan(fin.ar.open, cm, today);
   const collect = { ...cp.totals, month: cm, due_month: cp.totals.month, done: receivedIn(inp.payments, `${cm}-01`, today), end: monthEnd(cm) };
+  // budget: this calendar month's sales/profit vs the owner's targets, plus break-even (always current month, not the chosen range)
+  const curFin = cm === fin.period.from.slice(0, 7) && to === today ? fin : computeFinance(inp, `${cm}-01`, today);
+  const bt = (await query<{ monthly_sales_target: number | null; monthly_profit_target: number | null }>("SELECT monthly_sales_target::float8, monthly_profit_target::float8 FROM fin_settings WHERE id=1")).rows[0];
+  const budget = computeBudget({ today, monthSales: curFin.kpi.sales, monthNet: curFin.kpi.net,
+    grossMarginPct: curFin.kpi.gross_margin ?? inp.settings.target_gross_margin, fixedMonthly: curFin.fixed_monthly, monthOpex: curFin.kpi.opex,
+    salesTarget: bt?.monthly_sales_target ?? null, profitTarget: bt?.monthly_profit_target ?? null });
   // supplier offsets owed to us (price differences not yet deducted) — used to show the real net on the supplier pages
   const offOrders = await loadOrders().catch(() => []);
   const offMap = openBySupplier(offOrders);
   const offsets = { open: Math.round(Object.values(offMap).reduce((s, v) => s + v, 0) * 100) / 100, bySupplier: offMap };
-  return NextResponse.json({ ...fin, docs, attention: todo, collect, offsets, prev, link: null, ai: (await aiStatus()).configured, sync: { ...sync.rows[0], running: syncRunning() }, today });
+  return NextResponse.json({ ...fin, docs, attention: todo, collect, offsets, budget, prev, link: null, ai: (await aiStatus()).configured, sync: { ...sync.rows[0], running: syncRunning() }, today });
 }

@@ -26,7 +26,9 @@ export function Summary({ d, go, open, pickMonth }: { d: AccData; go: (t: Tab) =
   const costs = d.monthly.map(m => ({ ...m, costs: Number(m.cogs) + Number(m.opex) }));
   const att = d.attention || [];
   const c = d.collect;
+  const bud = d.budget;
   return <div className="space-y-4">
+    {bud && <BudgetCard b={bud} go={go} />}
     {c && <button type="button" onClick={() => go("collections")} className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 rounded-[22px] border border-[var(--border)] bg-[var(--card)] px-5 py-4 text-right transition hover:border-[var(--sky-border)] hover:shadow-lg">
       <span><span className="block text-[13px] font-semibold text-[var(--muted)]">مطلوب تحصيله الشهر ده</span><b className="text-[24px] font-extrabold tabular-nums text-[var(--ink)]">{sar(c.required)}</b></span>
       <span className="text-[13px]"><b className="block text-red-700">{sar(c.overdue)} متأخر</b><span className="text-[var(--muted)]">عند {c.overdue_parties} عميل</span></span>
@@ -72,6 +74,41 @@ export function Summary({ d, go, open, pickMonth }: { d: AccData; go: (t: Tab) =
       <Tile label="ضريبة مستحقة (تقديري)" value={sar(k.vat_payable)} onClick={() => go("vat")} sub="ضريبة المبيعات ناقص المشتريات والمصروفات" />
     </div>
   </div>;
+}
+
+function Meter({ label, t, kind, go }: { label: string; t: import("@/lib/budget").Target; kind: Tab; go: (t: Tab) => void }) {
+  if (t.target === null) return <button type="button" onClick={() => go(kind)} className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-3 text-right text-[13px] text-[var(--muted)] transition hover:border-[var(--sky-border)]">
+    <span className="font-bold text-[var(--ink)]">{label}: {sar(t.actual)}</span><span className="block text-[11.5px]">محدّدش هدف — اضغط لضبطه في الإعدادات</span></button>;
+  const pct = Math.min(100, t.pct || 0), expected = t.expected_by_now || 0;
+  const ok = t.on_track;
+  return <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+    <div className="flex items-baseline justify-between gap-2"><span className="text-[13px] font-bold text-[var(--ink)]">{label}</span>
+      <span className={`text-[11.5px] font-bold ${ok ? "text-emerald-700" : "text-amber-700"}`}>{ok ? "ماشي على الهدف" : "تحت المطلوب"}</span></div>
+    <div className="mt-1 flex items-baseline gap-1.5"><b className="text-[20px] tabular-nums text-[var(--navy)]">{sar(t.actual)}</b><span className="text-[12px] text-[var(--muted)]">من {sar(t.target)} · {Math.round(t.pct || 0)}%</span></div>
+    <div className="relative mt-2 h-2.5 overflow-hidden rounded-full bg-[var(--bg)]">
+      <div className={`h-full rounded-full ${ok ? "bg-emerald-500" : "bg-amber-500"}`} style={{ width: `${pct}%` }} />
+      <div className="absolute inset-y-0 w-0.5 bg-[var(--navy)]" style={{ right: `${Math.min(100, t.target ? expected / t.target * 100 : 0)}%` }} title="المفروض توصله لحد النهارده" />
+    </div>
+    <div className="mt-1.5 text-[11px] text-[var(--muted)]">المفروض لحد النهارده {sar(expected)} · المتوقع آخر الشهر <b className={t.projected && t.target && t.projected >= t.target ? "text-emerald-700" : "text-[var(--ink)]"}>{sar(t.projected)}</b></div>
+  </div>;
+}
+
+function BudgetCard({ b, go }: { b: import("@/lib/budget").Budget; go: (t: Tab) => void }) {
+  const be = b.breakeven;
+  return <Card title={`هدف الشهر ونقطة التعادل · يوم ${b.day} من ${b.days}`} hint="الأرقام عن الشهر الحالي. الخط الغامق في الشريط = المفروض توصله لحد النهارده لو ماشي بالتساوي.">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Meter label="مبيعات الشهر" t={b.sales} kind="pnl" go={go} />
+      <Meter label="صافي ربح الشهر" t={b.profit} kind="pnl" go={go} />
+      <div className={`rounded-2xl border px-4 py-3 ${be.reached ? "border-emerald-200 bg-emerald-50" : "border-[var(--border)] bg-[var(--card)]"}`}>
+        <div className="flex items-baseline justify-between gap-2"><span className="text-[13px] font-bold text-[var(--ink)]">نقطة التعادل</span>
+          <span className={`text-[11.5px] font-bold ${be.reached ? "text-emerald-700" : "text-amber-700"}`}>{be.reached ? "عدّيتها ✓" : "لسه"}</span></div>
+        {be.sales === null ? <div className="mt-1 text-[12px] text-[var(--muted)]">محتاج مبيعات بهامش ربح معروف عشان أحسبها.</div>
+          : <><div className="mt-1 flex items-baseline gap-1.5"><b className="text-[20px] tabular-nums text-[var(--navy)]">{sar(be.sales)}</b><span className="text-[12px] text-[var(--muted)]">تغطي التكاليف</span></div>
+            <div className="relative mt-2 h-2.5 overflow-hidden rounded-full bg-[var(--bg)]"><div className={`h-full rounded-full ${be.reached ? "bg-emerald-500" : "bg-[var(--sky)]"}`} style={{ width: `${Math.min(100, be.covered_pct || 0)}%` }} /></div>
+            <div className="mt-1.5 text-[11px] text-[var(--muted)]">{be.reached ? `بعت فوقها — كل بيعة بعد كده بتكسّبك` : `باقي ${sar(be.remaining)} توصلها (غطّيت ${Math.round(be.covered_pct || 0)}%)`}</div></>}
+      </div>
+    </div>
+  </Card>;
 }
 
 function Balances({ title, rows, onPick, more }: { title: string; rows: Array<{ name: string; unpaid: number; overdue: number; oldestDue: number }>; onPick: (n: string) => void; more: () => void }) {
