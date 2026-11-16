@@ -31,6 +31,11 @@ export async function GET(req: Request) {
   const bs = fin.books_start || "";
   const docs = { total: inp.sales.length, before_start: bs ? inp.sales.filter(s => s.date < bs).length : 0, in_period: inp.sales.filter(s => s.date >= fin.period.from && s.date <= to).length };
   const todo = attention({ ar: fin.ar, ap: fin.ap, monthly: fin.monthly as Array<{ m: string; opex: number; sales: number; cogs: number }>, price_guard: fin.price_guard, stock_alerts: fin.stock_alerts, cost_coverage: fin.kpi.cost_coverage, today });
+  // payment promises that came due and still aren't marked paid — most urgent, go first
+  const duePromises = (await query<{ customer: string; promise_date: string; promise_amount: number | null }>(
+    "SELECT customer, promise_date::text, promise_amount::float8 FROM collection_followups WHERE status='open' AND promise_date IS NOT NULL AND promise_date <= $1 ORDER BY promise_date", [today]).catch(() => ({ rows: [] }))).rows;
+  if (duePromises.length) { const k = (n: number) => Math.round(n).toLocaleString("en-US");
+    todo.unshift({ level: "danger", title: `${duePromises.length} وعد دفع فات ميعاده`, text: duePromises.slice(0, 3).map(p => `${p.customer}${p.promise_amount ? ` ${k(p.promise_amount)} ر.س` : ""} (${p.promise_date})`).join("، "), tab: "collections", party: duePromises[0].customer, kind: "client" }); }
   // this month's collection at a glance (the full list is in the collections tab)
   const cm = today.slice(0, 7), cp = collectionPlan(fin.ar.open, cm, today);
   const collect = { ...cp.totals, month: cm, due_month: cp.totals.month, done: receivedIn(inp.payments, `${cm}-01`, today), end: monthEnd(cm) };

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { query } from "@/lib/db";
 import { statement } from "@/lib/fin-books";
+import { rateCustomer } from "@/lib/fin-rating";
 
 /** Account statement for one Daftra customer or supplier (all time): documents, payments and the running balance. */
 export async function GET(req: Request) {
@@ -16,5 +17,9 @@ export async function GET(req: Request) {
   const pays = kind === "client" && ids.length ? (await query<{ id: string; date: string; amount: number; invoice_id: string | null; method: string }>(
     "SELECT id, pay_date::text date, amount::float8, invoice_id, method FROM daftra_client_payments WHERE client_id = ANY($1::bigint[]) ORDER BY pay_date, id", [ids])).rows : [];
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
-  return NextResponse.json({ kind, name, ...statement(kind, docs.map(d => ({ ...d, id: Number(d.id) })), pays.map(p => ({ ...p, id: Number(p.id), invoice_id: p.invoice_id ? Number(p.invoice_id) : null })), today) });
+  // how this customer pays (clients only — supplier payments aren't mirrored)
+  const rating = kind === "client"
+    ? rateCustomer(docs.map(d => ({ id: Number(d.id), date: d.date, total: d.total })), pays.map(p => ({ date: p.date, amount: p.amount, invoice_id: p.invoice_id ? Number(p.invoice_id) : null })))
+    : null;
+  return NextResponse.json({ kind, name, rating, ...statement(kind, docs.map(d => ({ ...d, id: Number(d.id) })), pays.map(p => ({ ...p, id: Number(p.id), invoice_id: p.invoice_id ? Number(p.invoice_id) : null })), today) });
 }
