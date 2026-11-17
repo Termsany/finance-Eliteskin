@@ -5,6 +5,7 @@ import { useToast } from "@/components/Toast";
 import type { cashForecast } from "@/lib/fin-cash";
 import type { Tab } from "./AccountsHub";
 import { sar, short, C, Hint, Kpi, Card, Table } from "./kit";
+import { CashPlan } from "./cash-plan";
 
 type F = ReturnType<typeof cashForecast>;
 type Data = { today: string; cash_balance: number | null; cash_as_of: string | null; vat_period: number; forecast: F };
@@ -56,6 +57,8 @@ export function CashTab({ go }: { go: (t: Tab) => void }) {
     {neg !== null ? <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-[12.5px] leading-6 text-red-900"><span className="text-red-600"><Icon name="flag" size={20} /></span><div><b className="block text-sm">تحذير: الفلوس هتخلص في أسبوع {dm(f.rows[neg].from)}</b>
       الرصيد المتوقع يوصل {sar(f.lowest.balance)}. الحلول بالترتيب: حصّل المديونيات المتأخرة الأول (<button type="button" onClick={() => go("ar")} className="font-bold underline">ليا عند العملاء</button>)، أجّل دفعات الموردين اللي تقدر تتفاوض عليها، وأجّل أي مصروف مش ضروري.</div></div>
       : <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-[12.5px] leading-6 text-emerald-950"><span className="text-emerald-700"><Icon name="check" size={20} /></span><div><b className="block text-sm">السيولة مغطية الـ 13 أسبوع الجايين</b>أقل رصيد متوقع {sar(f.lowest.balance)}{f.lowest.week >= 0 ? ` في أسبوع ${dm(f.rows[f.lowest.week].from)}` : ""}. خلّي دايماً احتياطي يغطي شهر مصاريف على الأقل ({sar(a.fixed_monthly + a.variable_monthly)}).</div></div>}
+
+    <CashPlan />
 
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Kpi label="الرصيد النهارده" value={sar(f.opening)} icon="wallet" color={C.teal} />
