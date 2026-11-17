@@ -62,6 +62,8 @@ export function Summary({ d, go, open, pickMonth }: { d: AccData; go: (t: Tab) =
       </Card>
     </div>
 
+    <Recommendations advice={d.advice || []} go={go} />
+
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Balances title="أكبر أرصدة العملاء" rows={d.ar.parties.slice(0, 6)} onPick={n => open("client", n)} more={() => go("clients")} />
       <Balances title="أكبر أرصدة الموردين" rows={d.ap.parties.slice(0, 6)} onPick={n => open("supplier", n)} more={() => go("suppliers")} />
@@ -108,6 +110,23 @@ function BudgetCard({ b, go }: { b: import("@/lib/budget").Budget; go: (t: Tab) 
             <div className="mt-1.5 text-[11px] text-[var(--muted)]">{be.reached ? `بعت فوقها — كل بيعة بعد كده بتكسّبك` : `باقي ${sar(be.remaining)} توصلها (غطّيت ${Math.round(be.covered_pct || 0)}%)`}</div></>}
       </div>
     </div>
+  </Card>;
+}
+
+type Advice = { level: "danger" | "warn" | "good" | "info"; title: string; text: string; tab?: string };
+const ADOT: Record<string, string> = { danger: "bg-red-500", warn: "bg-amber-500", good: "bg-emerald-500", info: "bg-[var(--navy)]" };
+/** The advisor's standing recommendations (strategy, not today's fires) — top few, each links to where to act. */
+function Recommendations({ advice, go }: { advice: Advice[]; go: (t: Tab) => void }) {
+  // actionable first (danger/warn), then info; keep a "good" only if nothing else
+  const order = { danger: 0, warn: 1, info: 2, good: 3 } as const;
+  const list = [...advice].sort((a, b) => order[a.level] - order[b.level]).slice(0, 4);
+  if (!list.length) return null;
+  return <Card title="توصيات المستشار المالي" hint="نصائح على مستوى الشركة بتتحدّث مع كل مزامنة — مش مشاكل اليوم العاجلة، لكن اللي يخلّي أرباحك أحسن على المدى.">
+    <div className="grid gap-2.5 sm:grid-cols-2">{list.map((a, i) => <div key={i} className="flex items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3.5 py-3">
+      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${ADOT[a.level] || ADOT.info}`} />
+      <div className="min-w-0 flex-1"><div className="text-[13.5px] font-bold text-[var(--ink)]">{a.title}</div><div className="mt-0.5 text-[12px] leading-5 text-[var(--muted)]">{a.text}</div>
+        {a.tab && <button type="button" onClick={() => go(a.tab as Tab)} className="mt-1.5 text-[11.5px] font-bold text-[var(--navy)] hover:underline">افتح ‹</button>}</div>
+    </div>)}</div>
   </Card>;
 }
 
