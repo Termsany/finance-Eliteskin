@@ -14,6 +14,7 @@ export default function SettingsClient() {
     <Daftra />
     <Books />
     <div className={box}><div className="mb-3 text-sm font-extrabold">المستشار المالي (الذكاء الاصطناعي)</div><AiPanel /></div>
+    <Briefing />
     <Password />
     <Backup />
     <div className={`${box} flex items-center justify-between gap-3`}>
@@ -87,6 +88,40 @@ function Books() {
 function AiPanel() {
   const [k, setK] = useState(0);
   return <AiSetup key={k} onSaved={() => setK(k + 1)} />;
+}
+
+type BLine = { label: string; value: string; tone?: string };
+function Briefing() {
+  const toast = useToast();
+  const [lines, setLines] = useState<BLine[] | null>(null);
+  const [webhook, setWebhook] = useState(""); const [hour, setHour] = useState(8); const [last, setLast] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null); const [login, setLogin] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/admin/briefing", { cache: "no-store" }).then(r => r.json()).then(j => setLines(j.lines || [])).catch(() => setLines([]));
+    fetch("/api/admin/briefing?config=1", { cache: "no-store" }).then(r => r.json()).then(j => { setWebhook(j.webhook || ""); setHour(j.hour ?? 8); setLast(j.last_sent || null); setLogin(j.last_login || null); }).catch(() => {});
+  }, []);
+  async function save() { setBusy("save"); const r = await fetch("/api/admin/briefing", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ webhook, hour }) }); const j = await r.json().catch(() => null); setBusy(null); if (r.ok) toast("اتحفظ", "success"); else toast(j?.error || "تعذر الحفظ", "error"); }
+  async function test() { setBusy("test"); const r = await fetch("/api/admin/briefing", { method: "POST" }); const j = await r.json().catch(() => null); setBusy(null); if (r.ok) toast("اتبعت — شوف القناة اللي ربطتها", "success"); else toast(j?.error || "تعذر الإرسال", "error"); }
+  const tone = (t?: string) => t === "good" ? "text-emerald-700" : t === "bad" ? "text-red-700" : t === "warn" ? "text-amber-700" : "text-[var(--ink)]";
+  return <div className={`${box} lg:col-span-2`}>
+    <div className="text-sm font-extrabold">التقرير الصباحي</div>
+    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">ملخص سريع لوضع الفلوس كل يوم. تقدر تشوفه هنا، وتخلّيه يتبعت لوحده كل يوم على واتساب أو سلاك أو أي خدمة بتستقبل Webhook.</p>
+    <div className="mt-3 grid gap-4 lg:grid-cols-2">
+      <div className="rounded-2xl bg-[var(--sky-light)] p-3">
+        <div className="mb-1.5 text-xs font-bold text-[var(--muted)]">ملخص النهارده</div>
+        {!lines ? <div className="h-24 animate-pulse rounded-xl bg-[var(--card)]" /> : <div className="space-y-1">{lines.map((l, i) => <div key={i} className="flex justify-between gap-2 text-[13px]"><span className="text-[var(--muted)]">{l.label}</span><b className={`tabular-nums ${tone(l.tone)}`}>{l.value}</b></div>)}</div>}
+      </div>
+      <div className="space-y-3">
+        <label className="block"><span className={lbl}>رابط الإرسال التلقائي (Webhook)</span><input dir="ltr" value={webhook} onChange={e => setWebhook(e.target.value)} placeholder="https://..." className={inp} /></label>
+        <label className="block"><span className={lbl}>ساعة الإرسال (بتوقيت الرياض)</span><select value={hour} onChange={e => setHour(Number(e.target.value))} className={inp}>{Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}</select></label>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={busy === "save"} onClick={() => void save()} className={btn}>{busy === "save" ? "بحفظ…" : "حفظ"}</button>
+          <button type="button" disabled={busy === "test" || !webhook} onClick={() => void test()} className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-bold text-[var(--navy)] disabled:opacity-60">{busy === "test" ? "ببعت…" : "ابعت تجربة دلوقتي"}</button>
+        </div>
+        <div className="text-[11px] text-[var(--muted)]">{webhook ? `بيتبعت كل يوم الساعة ${String(hour).padStart(2, "0")}:00${last ? ` · آخر إرسال ${last}` : ""}` : "محطّش رابط — التقرير بيظهر هنا بس."}{login && ` · آخر دخول ${login}`}</div>
+      </div>
+    </div>
+  </div>;
 }
 
 function Backup() {
