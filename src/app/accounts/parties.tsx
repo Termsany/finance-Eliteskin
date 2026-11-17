@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/components/Toast";
 import type { AccData, Open } from "./AccountsHub";
@@ -57,7 +57,10 @@ export function Parties({ d, kind, open, x }: { d: AccData; kind: PartyKind; ope
 }
 
 type St = { kind: PartyKind; name: string; lines: StLine[]; totals: { invoiced: number; refunds: number; paid: number; balance: number; open: number; overdue: number; unallocated: number };
-  open: Array<{ id: number; no: string; date: string; due: string; unpaid: number; days_late: number }>; last_invoice: string | null; last_payment: string | null };
+  open: Array<{ id: number; no: string; date: string; due: string; unpaid: number; days_late: number }>; last_invoice: string | null; last_payment: string | null;
+  rating?: { avg_days: number | null; paid_invoices: number; label: string; suggested_credit: number | null } | null };
+type Followup = { id: number; customer: string; note: string; promise_date: string | null; promise_amount: number | null; status: "open" | "kept" | "broken"; created_at: string };
+const RATE_CLS: Record<string, string> = { "ممتاز": "bg-emerald-50 text-emerald-700", "جيد": "bg-sky-50 text-sky-700", "متأخر": "bg-amber-50 text-amber-800", "متعثر": "bg-red-50 text-red-700", "جديد": "bg-slate-100 text-slate-600" };
 
 /** Account statement in a side drawer: running balance, open invoices, and a ready reminder message. */
 export function StatementDrawer({ kind, name, subdomain, onClose }: { kind: PartyKind; name: string; subdomain: string; onClose: () => void }) {
@@ -91,6 +94,12 @@ export function StatementDrawer({ kind, name, subdomain, onClose }: { kind: Part
             <div className="rounded-2xl bg-[var(--sky-light)] p-3"><div className="text-[11px] font-semibold text-[var(--muted)]">متأخر</div><div className={`text-[17px] font-extrabold tabular-nums ${s.totals.overdue ? "text-red-700" : ""}`}>{sar(s.totals.overdue)}</div></div>
           </div>
           <div className="text-[12px] text-[var(--muted)]">إجمالي الفواتير {sar(s.totals.invoiced)}{s.totals.refunds ? ` · مرتجعات ${sar(s.totals.refunds)}` : ""} · آخر فاتورة {s.last_invoice || "—"}{isC ? ` · آخر دفعة ${s.last_payment || "—"}` : ""}</div>
+          {isC && s.rating && <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] px-3 py-2.5 text-[12px]">
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${RATE_CLS[s.rating.label] || RATE_CLS["جديد"]}`}>عميل {s.rating.label}</span>
+            {s.rating.avg_days !== null ? <span className="text-[var(--muted)]">بيسدّد في <b className="text-[var(--ink)]">{s.rating.avg_days} يوم</b> في المتوسط · {s.rating.paid_invoices} فاتورة اتسددت</span> : <span className="text-[var(--muted)]">لسه ما سددش فواتير</span>}
+            {s.rating.suggested_credit !== null && <span className="text-[var(--muted)]">· حد ائتمان مقترح <b className="text-[var(--ink)]">{sar(s.rating.suggested_credit)}</b></span>}
+          </div>}
+          {isC && <FollowupPanel customer={name} />}
           {Math.abs(s.totals.unallocated) >= 1 && <div className="rounded-xl bg-amber-50 p-2.5 text-[12px] text-amber-900">فيه {sar(Math.abs(s.totals.unallocated))} فرق بين الحركة والفواتير المفتوحة — غالباً دفعة {s.totals.unallocated < 0 ? "مقدمة أو " : ""}مش مربوطة بفاتورة في دفترة.</div>}
           <div className="flex flex-wrap gap-2">
             {isC && s.open.length > 0 && <button type="button" onClick={() => void copy()} className="rounded-full bg-[var(--navy)] px-3.5 py-2 text-xs font-bold text-white">انسخ رسالة تذكير</button>}
@@ -116,4 +125,50 @@ export function StatementDrawer({ kind, name, subdomain, onClose }: { kind: Part
       </div>
     </aside>
   </div>, document.body);
+}
+
+/** Follow-up log and payment promises for one customer. */
+function FollowupPanel({ customer }: { customer: string }) {
+  const toast = useToast();
+  const [list, setList] = useState<Followup[] | null>(null);
+  const [note, setNote] = useState(""); const [pdate, setPdate] = useState(""); const [pamt, setPamt] = useState(""); const [busy, setBusy] = useState(false);
+  const load = useCallback(() => fetch(`/api/admin/finance/followups?customer=${encodeURIComponent(customer)}`, { cache: "no-store" }).then(r => r.json()).then(j => setList(j.followups || [])).catch(() => setList([])), [customer]);
+  useEffect(() => { void load(); }, [load]);
+  async function add() {
+    if (!note.trim() && !pdate) { toast("اكتب ملاحظة أو حدّد وعد بالدفع", "error"); return; }
+    setBusy(true);
+    const r = await fetch("/api/admin/finance/followups", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ customer, note, promise_date: pdate || null, promise_amount: pamt || null }) });
+    setBusy(false);
+    if (r.ok) { setNote(""); setPdate(""); setPamt(""); await load(); } else toast("تعذر الحفظ", "error");
+  }
+  async function mark(id: number, status: string) { const r = await fetch("/api/admin/finance/followups", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, status }) }); if (r.ok) await load(); }
+  async function del(id: number) { const r = await fetch(`/api/admin/finance/followups?id=${id}`, { method: "DELETE" }); if (r.ok) await load(); }
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
+  return <div className="rounded-2xl border border-[var(--border)] p-3">
+    <div className="mb-2 text-sm font-extrabold">متابعة التحصيل</div>
+    <div className="space-y-2">
+      <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="كلمته وقال إيه؟ (اختياري)" className="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-[13px]" />
+      <div className="flex flex-wrap items-center gap-2 text-[12px]">
+        <span className="text-[var(--muted)]">وعد يدفع:</span>
+        <input type="date" value={pdate} onChange={e => setPdate(e.target.value)} className="rounded-lg border border-[var(--border)] px-2 py-1.5" />
+        <input value={pamt} onChange={e => setPamt(e.target.value)} inputMode="decimal" dir="ltr" placeholder="المبلغ (اختياري)" className="w-28 rounded-lg border border-[var(--border)] px-2 py-1.5" />
+        <button type="button" disabled={busy} onClick={() => void add()} className="mr-auto rounded-full bg-[var(--navy)] px-3.5 py-1.5 text-xs font-bold text-white disabled:opacity-60">إضافة</button>
+      </div>
+    </div>
+    {list && list.length > 0 && <div className="mt-3 space-y-2">{list.map(f => <div key={f.id} className="rounded-xl bg-[var(--bg)] p-2.5 text-[12.5px]">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          {f.promise_date && <div className={`font-bold ${f.status === "open" && f.promise_date < today ? "text-red-700" : f.status === "kept" ? "text-emerald-700" : f.status === "broken" ? "text-red-700" : "text-[var(--navy)]"}`}>
+            وعد يدفع {f.promise_amount ? `${sar(f.promise_amount)} ` : ""}يوم {f.promise_date}{f.status === "kept" ? " ✓ التزم" : f.status === "broken" ? " ✗ ما دفعش" : f.promise_date < today ? " — فات الميعاد" : ""}</div>}
+          {f.note && <div className="text-[var(--ink)]">{f.note}</div>}
+          <div className="text-[11px] text-[var(--muted)]">{f.created_at.slice(0, 10)}</div>
+        </div>
+        <button type="button" onClick={() => void del(f.id)} aria-label="مسح" className="shrink-0 text-[var(--muted)] hover:text-red-600">✕</button>
+      </div>
+      {f.promise_date && f.status === "open" && <div className="mt-1.5 flex gap-1.5">
+        <button type="button" onClick={() => void mark(f.id, "kept")} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">دفع ✓</button>
+        <button type="button" onClick={() => void mark(f.id, "broken")} className="rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700">ما دفعش ✗</button>
+      </div>}
+    </div>)}</div>}
+  </div>;
 }
