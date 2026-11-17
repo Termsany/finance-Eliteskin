@@ -56,6 +56,10 @@ describe("profit and loss", () => {
     expect(f.kpi.gross).toBe(550); expect(f.kpi.opex).toBe(200); expect(f.kpi.other_income).toBe(30);
     expect(f.kpi.net).toBe(380);
   });
+  it("profit per customer: net minus the cost of what they bought", () => {
+    const c = f.salesByClient[0];
+    expect(c.net).toBe(900); expect(c.gross).toBe(600); expect(c.margin).toBe(66.67); expect(c.cost_known).toBe(true);
+  });
   it("never counts treasury transfers or partner money as expense or revenue", () => {
     expect(f.expensesByAccount.find(a => a.account_id === 2)?.treatment).toBe("exclude");
     expect(f.kpi.other_income).toBe(30);

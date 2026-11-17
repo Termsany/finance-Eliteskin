@@ -13,6 +13,7 @@ export type PartyKind = "client" | "supplier";
 export function Parties({ d, kind, open, x }: { d: AccData; kind: PartyKind; open: Open; x: (s: string) => string }) {
   const b = kind === "client" ? d.ar : d.ap;
   const [bk, setBk] = useState<string | null>(null);
+  const [byProfit, setByProfit] = useState(false);
   const old = (b.buckets["61-90"] || 0) + (b.buckets["90+"] || 0);
   const week = new Date(Date.parse(`${d.today}T00:00:00Z`) + 7 * 864e5).toISOString().slice(0, 10);
   const dueWeek = b.open.filter(o => o.due <= week).reduce((s, o) => s + o.unpaid, 0);
@@ -48,8 +49,14 @@ export function Parties({ d, kind, open, x }: { d: AccData; kind: PartyKind; ope
       ]} />
     </Card>
 
-    {isC ? <Card title="أكبر العملاء في الفترة (مبيعات)">
-      <Bars rows={d.salesByClient.slice(0, 10).map(c => ({ label: c.name, value: c.net, sub: `${c.share}% من مبيعاتك · ${c.n} فاتورة · آخر فاتورة ${c.last}` }))} color={C.blue} onPick={n => open("client", n)} />
+    {isC ? <Card title={byProfit ? "أكثر العملاء ربحية في الفترة" : "أكبر العملاء في الفترة (مبيعات)"} hint="الربح = مبيعات العميل ناقص تكلفة شراء اللي اشتراه. بيبان لما تكون تكلفة الأصناف معروفة من فواتير الشراء."
+      right={<div className="flex gap-1 rounded-xl bg-[var(--sky-light)] p-1">
+        <button type="button" onClick={() => setByProfit(false)} className={`rounded-lg px-3 py-1 text-xs font-bold ${!byProfit ? "bg-[var(--card)] text-[var(--navy)] shadow-sm" : "text-[var(--muted)]"}`}>بالمبيعات</button>
+        <button type="button" onClick={() => setByProfit(true)} className={`rounded-lg px-3 py-1 text-xs font-bold ${byProfit ? "bg-[var(--card)] text-[var(--navy)] shadow-sm" : "text-[var(--muted)]"}`}>بالربح</button></div>}>
+      <Bars rows={(byProfit ? [...d.salesByClient].filter(c => c.gross !== 0).sort((a, b) => b.gross - a.gross) : d.salesByClient).slice(0, 10).map(c => ({
+        label: c.name, value: byProfit ? c.gross : c.net,
+        sub: byProfit ? `ربح ${sar(c.gross)}${c.margin !== null ? ` · هامش ${c.margin}%` : " · تكلفة غير معروفة"} · مبيعات ${sar(c.net)}` : `${c.share}% من مبيعاتك · ${c.n} فاتورة · آخر فاتورة ${c.last}` }))}
+        color={byProfit ? C.mint : C.blue} onPick={n => open("client", n)} />
     </Card> : <Card title="المشتريات حسب المورد في الفترة">
       <Bars rows={d.purchasesBySupplier.slice(0, 10).map(s => ({ label: s.name, value: s.net, sub: `${s.n} فاتورة · ${s.unpaid ? `عليك ${sar(s.unpaid)}` : "مسدد"}` }))} color={C.teal} onPick={n => open("supplier", n)} />
     </Card>}

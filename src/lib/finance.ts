@@ -77,20 +77,20 @@ export function computeFinance(inp: Input, from0: string, to: string) {
   // ── sales & COGS
   const sales = inp.sales.filter(d => inR(d.date));
   const prod = new Map<string, { key: string; name: string; qty: number; net: number; cogs: number; costKnown: boolean; invoices: Set<number> }>();
-  const clients = new Map<string, { name: string; city: string; net: number; n: number; last: string }>();
+  const clients = new Map<string, { name: string; city: string; net: number; cogs: number; costKnown: boolean; n: number; last: string }>();
   let salesNet = 0, salesTax = 0, salesTotal = 0, refunds = 0, cogs = 0, knownNet = 0, lineNet = 0;
   const sold: Array<{ id: number; no: string; date: string; party: string; key: string; item: string; qty: number; price: number; cost: number | null }> = [];
   for (const d of sales) {
     const f = keep(d), mm = M.get(month(d.date));
     salesNet += d.net * f; salesTax += d.tax * f; salesTotal += d.total; refunds += d.refund;
     if (mm) { mm.sales += d.net * f; mm.invoices++; mm.vat_out += d.tax * f; }
-    const c = clients.get(d.party) || { name: d.party, city: d.city, net: 0, n: 0, last: "" }; c.net += d.net * f; c.n++; if (d.date > c.last) c.last = d.date; clients.set(d.party, c);
+    const c = clients.get(d.party) || { name: d.party, city: d.city, net: 0, cogs: 0, costKnown: true, n: 0, last: "" }; c.net += d.net * f; c.n++; if (d.date > c.last) c.last = d.date; clients.set(d.party, c);
     for (const l of d.lines) {
       const k = cb.keyOf(l), unit = cb.cost(l), q = l.quantity * f, n = l.net * f;
       const p = prod.get(k) || { key: k, name: l.item, qty: 0, net: 0, cogs: 0, costKnown: true, invoices: new Set<number>() };
       p.qty += q; p.net += n; p.invoices.add(d.id); lineNet += n;
       if (f > 0 && l.quantity > 0 && l.net > 0) sold.push({ id: d.id, no: d.no, date: d.date, party: d.party, key: k, item: l.item, qty: q, price: l.net / l.quantity, cost: unit });
-      if (unit !== null) { p.cogs += q * unit; cogs += q * unit; knownNet += n; if (mm) mm.cogs += q * unit; } else if (q > 0) p.costKnown = false;
+      if (unit !== null) { p.cogs += q * unit; cogs += q * unit; knownNet += n; if (mm) mm.cogs += q * unit; c.cogs += q * unit; } else if (q > 0) { p.costKnown = false; c.costKnown = false; }
       prod.set(k, p);
     }
   }
@@ -223,7 +223,8 @@ export function computeFinance(inp: Input, from0: string, to: string) {
       vat_out: r2(salesTax), vat_in: r2(purTax + expTax), vat_payable: r2(salesTax - purTax - expTax), cost_coverage: lineNet ? r2(knownNet / lineNet * 100) : 100 },
     monthly: monthly.map(m => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, typeof v === "number" ? r2(v) : v]))),
     salesByProduct: [...prod.values()].map(p => ({ name: p.name, qty: r2(p.qty), net: r2(p.net), cogs: r2(p.cogs), gross: r2(p.net - p.cogs), margin: p.net > 0 && p.costKnown ? r2((p.net - p.cogs) / p.net * 100) : null, invoices: p.invoices.size, cost_known: p.costKnown })).sort((a, b) => b.net - a.net),
-    salesByClient: [...clients.values()].map(c => ({ ...c, net: r2(c.net), share: salesNet ? r2(c.net / salesNet * 100) : 0 })).sort((a, b) => b.net - a.net),
+    salesByClient: [...clients.values()].map(c => ({ name: c.name, city: c.city, n: c.n, last: c.last, net: r2(c.net), share: salesNet ? r2(c.net / salesNet * 100) : 0,
+      gross: r2(c.net - c.cogs), margin: c.net > 0 && c.costKnown ? r2((c.net - c.cogs) / c.net * 100) : null, cost_known: c.costKnown })).sort((a, b) => b.net - a.net),
     purchasesByProduct: [...pprod.values()].map(p => { const pc = cb.byKey.get(p.key); return { name: p.name, qty: r2(p.qty), net: r2(p.net), avg_unit: p.qty ? r2(p.net / p.qty) : null, last_unit: pc?.last ? r2(pc.last.unit) : null, last_date: pc?.last?.date || null, supplier: pc?.last?.supplier || "" }; }).sort((a, b) => b.net - a.net),
     purchasesBySupplier: [...suppliers.values()].map(s => ({ ...s, net: r2(s.net), total: r2(s.total), unpaid: r2(ap.parties.find(p => p.name === s.name)?.unpaid || 0) })).sort((a, b) => b.net - a.net),
     ar, ap,

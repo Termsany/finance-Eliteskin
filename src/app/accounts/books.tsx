@@ -141,6 +141,7 @@ export function Products({ d, x, reload, subdomain }: { d: FinData; x: X; reload
     </Card>
     <PriceCalc d={d} needed={needed} opexRatio={opexRatio} />
     <GuardAndStock d={d} subdomain={subdomain} />
+    <DeadStock d={d} />
     <div className="flex flex-wrap items-center gap-1.5">
       <button type="button" onClick={() => setF(null)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${!f ? "bg-[var(--navy)] text-white" : "bg-white ring-1 ring-[var(--border)]"}`}>الكل ({rows.length})</button>
       {Object.entries(PSTAT).filter(([k]) => counts[k]).map(([k, [l]]) => <button key={k} type="button" onClick={() => setF(f === k ? null : k)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${f === k ? "bg-[var(--navy)] text-white" : "bg-white ring-1 ring-[var(--border)]"}`}>{l} ({counts[k]})</button>)}
@@ -166,4 +167,24 @@ export function Products({ d, x, reload, subdomain }: { d: FinData; x: X; reload
       </div>} />
     </Card>
   </div>;
+}
+
+/** Products sitting in stock that haven't sold in 90+ days — cash tied up on the shelf. */
+function DeadStock({ d }: { d: FinData }) {
+  const dead = d.pricing.filter(p => p.status === "dead_stock" && (p.stock_value || 0) > 0).sort((a, b) => (b.stock_value || 0) - (a.stock_value || 0));
+  if (!dead.length) return null;
+  const tied = dead.reduce((s, p) => s + (p.stock_value || 0), 0);
+  return <Card title="مخزون راكد" hint="أصناف عندها رصيد في دفترة وما اتباعتش من أكتر من 90 يوم. دي فلوس واقفة على الرف — فكّر في عرض أو تصفية.">
+    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-2xl bg-violet-50 px-4 py-3">
+      <span className="text-[13px] font-bold text-violet-900">فلوس واقفة في مخزون راكد: <b className="text-[17px] tabular-nums">{sar(tied)}</b></span>
+      <span className="text-[12px] text-violet-700">{dead.length} صنف · بالتكلفة</span>
+    </div>
+    <div className="space-y-1.5">{dead.slice(0, 12).map(p => <div key={p.key} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-3 py-2 text-xs">
+      <b className="min-w-0 flex-1 truncate" dir="auto">{p.name}</b>
+      <span className="text-[var(--muted)]">الرصيد {num(p.stock)}</span>
+      <span className="text-[var(--muted)]">آخر بيع {p.last_sale || "—"}</span>
+      <b className="shrink-0 tabular-nums text-violet-700">{sar(p.stock_value)}</b>
+    </div>)}</div>
+    {dead.length > 12 && <div className="mt-2 text-center text-[11px] text-[var(--muted)]">+{dead.length - 12} صنف تاني — فلتر «مخزون راكد» في الجدول تحت</div>}
+  </Card>;
 }
