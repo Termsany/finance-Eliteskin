@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useToast } from "@/components/Toast";
+import { Icon } from "@/components/Icon";
 import type { AccData } from "./AccountsHub";
 import { sar, num, pct, mLabel, C, Card, ExcelBtn, MonthChart, Table, Pill } from "./kit";
 import { AppExpenses } from "./app-expenses";
@@ -74,6 +75,10 @@ export function Pnl({ d, pickMonth }: { d: AccData; pickMonth: (m: string) => vo
   ];
   const cell = (r: Row, v: number | null) => v === null ? "—" : r.pctRow ? pct(v) : `${r.minus && v ? "(" : ""}${num(v)}${r.minus && v ? ")" : ""}`;
   return <div className="space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="text-[13px] text-[var(--muted)]">قائمة الدخل شهر بشهر · تقرير شهري كامل جاهز للطباعة</span>
+      <a href={`/report/month?m=${d.today.slice(0, 7)}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-full bg-[var(--navy)] px-3.5 py-2 text-xs font-bold text-white"><Icon name="file" size={14} />التقرير الشهري PDF</a>
+    </div>
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Tile label="صافي المبيعات" value={sar(d.kpi.sales)} sub={`${d.kpi.invoices} فاتورة`} />
       <Tile label="مجمل الربح" value={sar(d.kpi.gross)} sub={`هامش ${pct(d.kpi.gross_margin)}`} />
