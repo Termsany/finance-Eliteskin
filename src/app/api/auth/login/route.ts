@@ -17,6 +17,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: rl.allowed ? "كلمة المرور غير صحيحة" : "محاولات غلط كتير — جرّب بعد ربع ساعة" }, { status: rl.allowed ? 401 : 429 });
   }
   await query("DELETE FROM login_attempts WHERE key=$1", [key]).catch(() => {});
+  // remember the last successful login (shown in settings as a simple security signal)
+  await query("INSERT INTO app_settings(key, value, updated_at) VALUES('last_login', $1, now()) ON CONFLICT(key) DO UPDATE SET value=$1, updated_at=now()", [`${new Date().toISOString()}|${ip}`]).catch(() => {});
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE, await newToken(), cookieOptions);
   return res;
