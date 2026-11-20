@@ -14,6 +14,7 @@ type Data = {
   vat_period: number; vat_filing: VatFiling; collect_pct: number;
   balance_log: BalLog[];
   forecast: F;
+  samples_promo?: { month: string; sample_cost: number; promo_cost: number; total: number };
 };
 const dm = (d: string) => `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`;
 
@@ -189,6 +190,14 @@ export function CashTab({ go }: { go: (t: Tab) => void }) {
       <Kpi label="أقل رصيد متوقع" value={short(f.lowest.balance) + " ر.س"} sub={lowestWeek ? `في ${dm(lowestWeek.from)}` : undefined} icon="flag" color={f.lowest.balance < 0 ? C.red : f.lowest.balance < f.safety_line ? C.amber : C.green} tone={f.lowest.balance < 0 ? "bad" : f.lowest.balance < f.safety_line ? "bad" : "good"} />
       <Kpi label="كام يوم الفلوس تكفي" value={f.days_of_cash !== null ? `${f.days_of_cash} يوم` : "—"} icon="trophy" color={f.days_of_cash !== null && f.days_of_cash < 30 ? C.red : f.days_of_cash !== null && f.days_of_cash < 60 ? C.amber : C.green} tone={f.days_of_cash !== null && f.days_of_cash < 30 ? "bad" : undefined} hint="كام يوم رصيدك الحالي يقدر يغطي المصاريف المتوقعة لو مفيش أي فلوس داخلة." />
     </div>
+
+    {/* ── Samples/Promo cost this month ── */}
+    {d.samples_promo && d.samples_promo.total > 0 && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--sky-light)] p-3 text-xs">
+      <Icon name="samples" size={16} /><span className="font-bold">عينات ودعاية الشهر:</span>
+      <span>عينات <b>{sar(d.samples_promo.sample_cost)}</b></span>
+      <span>دعاية <b>{sar(d.samples_promo.promo_cost)}</b></span>
+      <span className="font-bold text-[var(--navy)]">إجمالي {sar(d.samples_promo.total)}</span>
+    </div>}
 
     {/* ── Sub-tabs ── */}
     <div className="flex gap-1 rounded-xl bg-[var(--bg)] p-1">
