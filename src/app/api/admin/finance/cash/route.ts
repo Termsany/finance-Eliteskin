@@ -58,6 +58,11 @@ export async function GET(req: Request) {
     appExpenses: appExpRows as Array<{ id: number; name: string; cat: string; amount: number; type: "fixed" | "temp" | "once"; start: string | null; end: string | null; stop: string | null; date: string | null; note: string }>,
   });
 
+  // Sample + promo costs this month (already-spent cash outflows)
+  const curMonth = today.slice(0, 7);
+  const sampleCost = (await query<{ total: string }>("SELECT COALESCE(SUM(total_cost), 0) as total FROM sample_records WHERE month=$1", [curMonth]).catch(() => ({ rows: [{ total: "0" }] }))).rows[0];
+  const promoCost = (await query<{ total: string }>("SELECT COALESCE(SUM(amount), 0) as total FROM promo_expenses WHERE month=$1", [curMonth]).catch(() => ({ rows: [{ total: "0" }] }))).rows[0];
+
   return NextResponse.json({
     today,
     cash_balance: s?.cash_balance ?? null,
@@ -67,6 +72,7 @@ export async function GET(req: Request) {
     collect_pct: collectPct,
     balance_log: balanceLog,
     forecast,
+    samples_promo: { month: curMonth, sample_cost: Number(sampleCost.total), promo_cost: Number(promoCost.total), total: Number(sampleCost.total) + Number(promoCost.total) },
   });
 }
 
