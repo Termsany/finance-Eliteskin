@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ query: vi.fn(), pool: { connect: vi.fn() } }));
 import { computeFinance, type Input, type Doc } from "@/lib/finance";
 import { numberGaps, runAudit, auditScore, type Check } from "@/lib/fin-audit";
-import { cashForecast, collectChance } from "@/lib/fin-cash";
+import { cashForecast } from "@/lib/fin-cash";
 
 const doc = (o: Partial<Doc>): Doc => ({ id: 1, no: "1", date: "2026-09-10", due_days: 30, party_id: 1, party: "عميل", city: "", branch: "", payment_status: 2, net: 0, tax: 0, total: 0, paid: 0, unpaid: 0, refund: 0, lines: [], ...o });
 const base = (o: Partial<Input> = {}): Input => ({
@@ -50,9 +50,8 @@ describe("cash forecast v2", () => {
     baseline: { opex: 30_000, sales_gross: 0, sales: 0, cogs: 0 },
     kpi: { vat_payable: 0 },
   } as unknown as Parameters<typeof cashForecast>[0];
-  const f = cashForecast(fin, { today: "2026-11-01", fixed: [{ id: "x", name: "رواتب", category: "salaries", monthly_amount: 20_000, start_month: "2026-01", end_month: null, notes: "" }] }, 5000, { includeNew: false });
+  const f = cashForecast(fin, { today: "2026-11-01", fixed: [{ id: "x", name: "رواتب", category: "salaries", monthly_amount: 20_000, start_month: "2026-01", end_month: null, notes: "", type: "fixed" as const }] }, 5000, { includeNew: false });
   it("uses single collection rate (90%) and puts fixed costs on the 27th", () => {
-    expect(collectChance(0)).toBe(0.95); expect(collectChance(95)).toBe(0.2); // legacy fn still works
     expect(f.rows[0].from).toBe("2026-11-01"); // Sunday-start weeks
     // 10000 * 90% = 9000 on due week; 8000 * 90% = 7200 spread over 4 weeks (no avg_days) = 1800/wk
     expect(f.rows[1].in_ar).toBe(Math.round(9000 + 1800));

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cashForecast, collectChance } from "@/lib/fin-cash";
+import { cashForecast } from "@/lib/fin-cash";
 
 type Fin = Parameters<typeof cashForecast>[0];
 const apDoc = (party: string, no: string, unpaid: number, due: string, days: number) => ({ id: 1, no, date: due, party, unpaid, due, days });
@@ -90,7 +90,7 @@ describe("cash forecast v2 — new sales with COGS", () => {
 
 describe("cash forecast v2 — KPIs", () => {
   it("calculates safety line as 1 month of expenses", () => {
-    const f = cashForecast(fin(), { fixed: [{ id: "1", name: "رواتب", category: "مرتبات", monthly_amount: 30000, start_month: "2024-01-01", end_month: null, notes: "" }], today: "2026-11-16" }, 100000, { includeNew: false });
+    const f = cashForecast(fin(), { fixed: [{ id: "1", name: "رواتب", category: "مرتبات", monthly_amount: 30000, start_month: "2024-01-01", end_month: null, notes: "", type: "fixed" as const }], today: "2026-11-16" }, 100000, { includeNew: false });
     expect(f.safety_line).toBe(30000);
   });
   it("calculates days of cash", () => {
@@ -112,12 +112,3 @@ describe("cash forecast v2 — KPIs", () => {
   });
 });
 
-describe("collectChance (legacy)", () => {
-  it("still returns expected values", () => {
-    expect(collectChance(0)).toBe(0.95);
-    expect(collectChance(15)).toBe(0.8);
-    expect(collectChance(45)).toBe(0.6);
-    expect(collectChance(75)).toBe(0.4);
-    expect(collectChance(120)).toBe(0.2);
-  });
-});

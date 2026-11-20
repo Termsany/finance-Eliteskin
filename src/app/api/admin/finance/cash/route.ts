@@ -20,19 +20,32 @@ export async function GET(req: Request) {
   const includeNew = url.searchParams.get("new") === "1";
   const offsets = openBySupplier(await loadOrders().catch(() => []));
 
-  // Per-customer avg payment days from rating
+  // Per-customer avg payment days from rating (use invoice_payments for linked matches)
   const customerAvgDays: Record<string, number> = {};
   const salesByParty = new Map<string, typeof inp.sales>();
-  const paysByParty = new Map<string, typeof inp.payments>();
-  for (const d of inp.sales) { const arr = salesByParty.get(d.party) || []; arr.push(d); salesByParty.set(d.party, arr); }
+  const idToName = new Map<number, string>();
+  for (const d of inp.sales) {
+    const arr = salesByParty.get(d.party) || []; arr.push(d); salesByParty.set(d.party, arr);
+    if (d.party_id != null) idToName.set(Number(d.party_id), d.party);
+  }
+  const invPayRows = (await query<{ invoice_id: string; pay_date: string; amount: string }>(
+    "SELECT invoice_id, pay_date::text, amount::float8 FROM daftra_invoice_payments"
+  ).catch(() => ({ rows: [] }))).rows;
+  const paysByParty = new Map<string, Array<{ date: string; amount: number; invoice_id: number | null }>>();
+  for (const ip of invPayRows) {
+    const inv = inp.sales.find(s => s.id === Number(ip.invoice_id));
+    if (inv) {
+      const arr = paysByParty.get(inv.party) || []; arr.push({ date: ip.pay_date, amount: Number(ip.amount), invoice_id: Number(ip.invoice_id) }); paysByParty.set(inv.party, arr);
+    }
+  }
   for (const p of inp.payments) {
     if (p.client_id == null) continue;
-    const name = inp.sales.find(s => s.party_id != null && Number(s.party_id) === Number(p.client_id))?.party;
-    if (name) { const arr = paysByParty.get(name) || []; arr.push(p); paysByParty.set(name, arr); }
+    const name = idToName.get(Number(p.client_id));
+    if (name) { const arr = paysByParty.get(name) || []; arr.push({ date: p.date, amount: p.amount, invoice_id: null }); paysByParty.set(name, arr); }
   }
   for (const p of fin.ar.parties) {
     const docs = (salesByParty.get(p.name) || []).map(d => ({ id: d.id, date: d.date, total: d.total }));
-    const pays = (paysByParty.get(p.name) || []).map(py => ({ date: py.date, amount: py.amount, invoice_id: null as number | null }));
+    const pays = paysByParty.get(p.name) || [];
     const rating = rateCustomer(docs, pays);
     if (rating.avg_days !== null) customerAvgDays[p.name] = rating.avg_days;
   }
@@ -45,6 +58,12 @@ export async function GET(req: Request) {
   const vatFiling = (s?.vat_filing === "monthly" ? "monthly" : "quarterly") as VatFiling;
   const collectPct = s?.cash_collect_pct ?? 90;
 
+  // VAT: extrapolate the partial month to a full filing period
+  const dayOfMonth = Number(today.slice(8, 10));
+  const daysInMonth = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0).getDate();
+  const monthlyVat = dayOfMonth > 0 ? fin.kpi.vat_payable / dayOfMonth * daysInMonth : 0;
+  const vatPeriodEstimate = Math.round(monthlyVat * (vatFiling === "quarterly" ? 3 : 1));
+
   // Balance log for forecast accuracy
   const balanceLog = (await query<{ week_start: string; actual: number; forecast: number | null }>(
     "SELECT week_start::text, actual::float8, forecast::float8 FROM cash_balance_log ORDER BY week_start DESC LIMIT 13"
@@ -52,27 +71,21 @@ export async function GET(req: Request) {
 
   const forecast = cashForecast(fin, inp, s?.cash_balance ?? 0, {
     includeNew, offsets, collectPct, vatFiling,
-    vatPeriod: fin.kpi.vat_payable,
+    vatPeriod: vatPeriodEstimate,
     cogsRatio: fin.baseline && fin.baseline.sales > 0 ? fin.baseline.cogs / fin.baseline.sales : undefined,
     customerAvgDays,
     appExpenses: appExpRows as Array<{ id: number; name: string; cat: string; amount: number; type: "fixed" | "temp" | "once"; start: string | null; end: string | null; stop: string | null; date: string | null; note: string }>,
   });
 
-  // Sample + promo costs this month (already-spent cash outflows)
-  const curMonth = today.slice(0, 7);
-  const sampleCost = (await query<{ total: string }>("SELECT COALESCE(SUM(total_cost), 0) as total FROM sample_records WHERE month=$1", [curMonth]).catch(() => ({ rows: [{ total: "0" }] }))).rows[0];
-  const promoCost = (await query<{ total: string }>("SELECT COALESCE(SUM(amount), 0) as total FROM promo_expenses WHERE month=$1", [curMonth]).catch(() => ({ rows: [{ total: "0" }] }))).rows[0];
-
   return NextResponse.json({
     today,
     cash_balance: s?.cash_balance ?? null,
     cash_as_of: s?.cash_as_of ?? null,
-    vat_period: fin.kpi.vat_payable,
+    vat_period: vatPeriodEstimate,
     vat_filing: vatFiling,
     collect_pct: collectPct,
     balance_log: balanceLog,
     forecast,
-    samples_promo: { month: curMonth, sample_cost: Number(sampleCost.total), promo_cost: Number(promoCost.total), total: Number(sampleCost.total) + Number(promoCost.total) },
   });
 }
 
@@ -87,13 +100,22 @@ export async function PUT(req: Request) {
     if (!Number.isFinite(v) || Math.abs(v) > 1e10) return NextResponse.json({ error: "اكتب رصيد صحيح" }, { status: 400 });
     await query("UPDATE fin_settings SET cash_balance=$1, cash_as_of=(now() AT TIME ZONE 'Asia/Riyadh')::date, updated_at=now() WHERE id=1", [v]);
 
-    // Log this week's balance for forecast accuracy tracking
-    const today = riyadhToday();
-    const dow = new Date(Date.parse(`${today}T00:00:00Z`)).getUTCDay();
-    const weekStart = new Date(Date.parse(`${today}T00:00:00Z`) - dow * 864e5).toISOString().slice(0, 10);
+    // Log this week's balance + snapshot the forecast for accuracy tracking
+    const today2 = riyadhToday();
+    const dow = new Date(Date.parse(`${today2}T00:00:00Z`)).getUTCDay();
+    const weekStart = new Date(Date.parse(`${today2}T00:00:00Z`) - dow * 864e5).toISOString().slice(0, 10);
+    // Compute a quick forecast to snapshot
+    let forecastBal: number | null = null;
+    try {
+      const inp2 = await loadInput(today2);
+      const fin2 = computeFinance(inp2, `${today2.slice(0, 7)}-01`, today2);
+      const fc = cashForecast(fin2, inp2, v, { includeNew: false });
+      const nextWeek = fc.rows.find(r => r.i === 1);
+      forecastBal = nextWeek ? nextWeek.balance : null;
+    } catch { /* skip forecast if it fails */ }
     await query(
-      "INSERT INTO cash_balance_log(week_start, actual) VALUES($1, $2) ON CONFLICT(week_start) DO UPDATE SET actual=$2, logged_at=now()",
-      [weekStart, v]
+      "INSERT INTO cash_balance_log(week_start, actual, forecast) VALUES($1, $2, $3) ON CONFLICT(week_start) DO UPDATE SET actual=$2, forecast=COALESCE($3, cash_balance_log.forecast), logged_at=now()",
+      [weekStart, v, forecastBal]
     ).catch(() => {});
 
     return NextResponse.json({ ok: true });

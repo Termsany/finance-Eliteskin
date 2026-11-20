@@ -32,6 +32,7 @@ export type PlanInputs = {
   // the products the plan's new sales are assumed to be, and the blended cost ratio from them
   plan_cogs_ratio: number;
   products: Array<{ key: string; name: string; cost: number; price: number; cost_ratio: number; qty_sold: number }>;
+  collect_pct?: number;
 };
 export type PlanOpts = {
   sales: number;        // planned net monthly sales (before VAT) from next month

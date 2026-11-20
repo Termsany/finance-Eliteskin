@@ -185,18 +185,26 @@ export function cashForecast(
     }
   }
 
-  // ── Fixed monthly costs on the 27th
-  const fixedMonthly = inp.fixed.reduce((s, f) => s + f.monthly_amount, 0);
+  // ── Fixed monthly costs on the 27th (only type=fixed, filtered by active date range)
+  const fixedItems = inp.fixed.filter(f => f.type === "fixed");
   const B = fin.baseline;
-  const fixedUse = fixedMonthly > 0 ? fixedMonthly : B?.opex || 0;
+  const fixedForMonth = (m: string) => {
+    const ms = `${m}-01`;
+    return fixedItems.filter(f => f.start_month.slice(0, 10) <= ms && (!f.end_month || ms <= f.end_month.slice(0, 10))).reduce((s, f) => s + f.monthly_amount, 0);
+  };
+  const curFixedMonthly = fixedForMonth(inp.today.slice(0, 7));
   for (let k = 0; k < W * 7; k++) {
     const d = iso(start + k * DAY);
     if (d < inp.today || d.slice(8, 10) !== "27") continue;
+    const m = d.slice(0, 7);
+    const mFixed = fixedForMonth(m);
+    const fixedUse = mFixed > 0 ? mFixed : B?.opex || 0;
     const w = weekOf(d)!;
+    const activeNames = fixedItems.filter(f => { const ms = `${m}-01`; return f.start_month.slice(0, 10) <= ms && (!f.end_month || ms <= f.end_month.slice(0, 10)); }).map(f => f.name);
     weeks[w].out_fixed += fixedUse;
     weeks[w].items.push({
       kind: "out",
-      label: fixedMonthly > 0 ? `مصاريف ثابتة (${inp.fixed.map(f => f.name).join("، ")})` : "متوسط المصروفات الشهرية",
+      label: mFixed > 0 ? `مصاريف ثابتة (${activeNames.join("، ")})` : "متوسط المصروفات الشهرية",
       amount: r0(fixedUse),
     });
   }
@@ -211,7 +219,6 @@ export function cashForecast(
         weeks[w].items.push({ kind: "out", label: `${e.name} (مرة واحدة)`, amount: r0(e.amount) });
       }
     } else if (e.type === "temp" && e.start) {
-      // temp expenses: check each month in the forecast window
       for (let k = 0; k < W * 7; k++) {
         const d = iso(start + k * DAY);
         if (d < inp.today || d.slice(8, 10) !== "01") continue;
@@ -228,6 +235,7 @@ export function cashForecast(
   }
 
   // ── Variable running costs
+  const fixedMonthly = curFixedMonthly;
   const variableMonthly = Math.max(0, (B?.opex || 0) - fixedMonthly);
   if (fixedMonthly > 0 && variableMonthly > 0) {
     for (const w of weeks) w.out_var += variableMonthly / 4.33;
@@ -280,7 +288,8 @@ export function cashForecast(
   const offLeft = Object.values(credit).reduce((s, v) => s + v, 0);
 
   // ── Safety line = 1 month of fixed + variable expenses
-  const safetyLine = fixedUse + (fixedMonthly > 0 ? variableMonthly : 0);
+  const fixedUse = curFixedMonthly > 0 ? curFixedMonthly : B?.opex || 0;
+  const safetyLine = fixedUse + (curFixedMonthly > 0 ? variableMonthly : 0);
 
   // ── Days of cash: how many days the opening balance covers at current burn rate
   const weeklyBurn = tot.out / W;
@@ -334,9 +343,4 @@ export function cashForecast(
       offsets_applied: r0(offTotal - offLeft),
     },
   };
-}
-
-/** Legacy export for backward compat — the tiered collection function is no longer used in the forecast. */
-export function collectChance(daysLate: number) {
-  return daysLate <= 0 ? 0.95 : daysLate <= 30 ? 0.8 : daysLate <= 60 ? 0.6 : daysLate <= 90 ? 0.4 : 0.2;
 }

@@ -38,7 +38,8 @@ export function toEntries(list: AppExpense[], today: string) {
 /** Monthly fixed costs in the shape the finance engine plans with. */
 export function toFixed(list: AppExpense[]) {
   return list.filter(e => e.type !== "once" && e.start).map(e => ({ id: String(e.id), name: e.name, category: e.cat, monthly_amount: e.amount,
-    start_month: `${e.start}-01`, end_month: e.type === "temp" ? `${e.end}-01` : e.stop ? `${prevMonth(e.stop)}-01` : null, notes: e.note }));
+    start_month: `${e.start}-01`, end_month: e.type === "temp" ? `${e.end}-01` : e.stop ? `${prevMonth(e.stop)}-01` : null, notes: e.note,
+    type: e.type as "fixed" | "temp" }));
 }
 const prevMonth = (m: string) => { let [y, mo] = m.split("-").map(Number); mo--; if (mo < 1) { mo = 12; y--; } return `${y}-${String(mo).padStart(2, "0")}`; };
 

@@ -14,7 +14,7 @@ export async function loadPlanInputs(): Promise<PlanInputs> {
   const inp = await loadInput(today);
   const fin = computeFinance(inp, `${today.slice(0, 7)}-01`, today);
   const B = fin.baseline;
-  const s = (await query<{ cash_balance: number | null; cash_as_of: string | null }>("SELECT cash_balance::float8, cash_as_of::text FROM fin_settings WHERE id=1").catch(() => ({ rows: [] }))).rows[0];
+  const s = (await query<{ cash_balance: number | null; cash_as_of: string | null; cash_collect_pct: number; vat_filing: string }>("SELECT cash_balance::float8, cash_as_of::text, cash_collect_pct, vat_filing FROM fin_settings WHERE id=1").catch(() => ({ rows: [] }))).rows[0];
   const offsets = openBySupplier(await loadOrders().catch(() => []));
   const yearAgo = new Date(Date.parse(`${today}T00:00:00Z`) - 365 * 864e5).toISOString().slice(0, 10);
   const avgDue = (docs: Array<{ date: string; due_days: number; total: number }>) => {
@@ -44,6 +44,7 @@ export async function loadPlanInputs(): Promise<PlanInputs> {
     base: { sales: B?.sales ?? 0, cogs_ratio: cogsRatio, opex: Math.max(fin.fixed_monthly, B?.opex ?? 0), months: B?.months_count ?? 0 },
     lag_in: clamp(Math.round(avgDue(inp.sales) / 30), 1, 3), lag_out: clamp(Math.round(avgDue(inp.purchases) / 30), 0, 3), dso: Math.round(dso),
     plan_cogs_ratio: Math.round(planRatio * 1000) / 1000, products: products.map(x => ({ ...x, cost: Math.round(x.cost * 100) / 100, price: Math.round(x.price * 100) / 100, cost_ratio: Math.round(x.cost_ratio * 1000) / 1000 })),
+    collect_pct: s?.cash_collect_pct ?? 90,
   };
 }
 
@@ -53,7 +54,7 @@ export function readOpts(p: PlanInputs, q: Record<string, unknown>): PlanOpts {
   const finF = Number(q.fin), finN = Math.round(num("finN", 12, 1, 60));
   return {
     sales: num("sales", Math.round(p.base.sales / 1000) * 1000, 0, 1e9),
-    collect: num("collect", 90, 10, 100) / 100,
+    collect: num("collect", p.collect_pct ?? 90, 10, 100) / 100,
     cut: num("cut", 0, 0, 80),
     deferAp: Math.round(num("defer", 0, 0, 6)),
     lagIn: Math.round(num("lag", p.lag_in, 0, 4)),
