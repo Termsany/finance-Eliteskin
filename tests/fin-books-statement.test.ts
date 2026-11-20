@@ -33,3 +33,14 @@ describe("attention list", () => {
     expect(a[0].tab).toBe("expenses");
   });
 });
+
+describe("statement with a sales return not tied to an invoice", () => {
+  it("lowers the balance as a return, not as money received", () => {
+    const s = statement("client", [d({ id: 1, total: 5000, unpaid: 5000 })], [{ id: 0, date: "2026-10-10", amount: 1000, invoice_id: null, method: "return" }], "2026-11-20");
+    expect(s.totals.open).toBe(4000);
+    expect(s.totals.paid).toBe(0);
+    expect(s.totals.refunds).toBe(1000);
+    expect(s.lines.at(-1)).toMatchObject({ kind: "refund", credit: 1000, balance: 4000 });
+    expect(s.last_payment).toBeNull();
+  });
+});

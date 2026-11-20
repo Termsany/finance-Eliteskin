@@ -28,7 +28,9 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
       if (paid > 0) lines.push({ date: d.date, kind: "payment", ref: d.no, doc_id: d.id, debit: paid, credit: 0, note: `المدفوع من ${d.no}` });
     }
   }
-  if (kind === "client") for (const p of pays) lines.push({ date: p.date, kind: "payment", ref: String(p.id), doc_id: p.invoice_id, debit: 0, credit: p.amount, note: p.method ? `دفعة (${p.method})` : "دفعة" });
+  const isRet = (p: StPay) => p.method === "return";   // a sales return not tied to an invoice: lowers the balance, isn't money received
+  if (kind === "client") for (const p of pays) lines.push({ date: p.date, kind: isRet(p) ? "refund" : "payment", ref: String(p.id), doc_id: p.invoice_id, debit: 0, credit: p.amount,
+    note: isRet(p) ? "مرتجعات مش مربوطة بفاتورة" : p.method ? `دفعة (${p.method})` : "دفعة" });
   const order = { invoice: 0, refund: 1, payment: 2 } as const;
   lines.sort((a, b) => a.date.localeCompare(b.date) || order[a.kind] - order[b.kind]);
   let bal = 0;
@@ -48,14 +50,14 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
   const openTotal = r2(open.reduce((s, o) => s + o.unpaid, 0));
   return {
     lines: out,
-    totals: { invoiced: r2(docs.filter(d => !draft(d)).reduce((s, d) => s + d.total, 0)), refunds: r2(docs.reduce((s, d) => s + d.refund, 0)),
-      paid: r2(kind === "client" ? pays.reduce((s, p) => s + p.amount, 0) : docs.filter(d => !draft(d)).reduce((s, d) => s + Math.max(0, d.total - d.refund - d.unpaid), 0)),
+    totals: { invoiced: r2(docs.filter(d => !draft(d)).reduce((s, d) => s + d.total, 0)), refunds: r2(docs.reduce((s, d) => s + d.refund, 0) + pays.filter(isRet).reduce((s, p) => s + p.amount, 0)),
+      paid: r2(kind === "client" ? pays.filter(p => !isRet(p)).reduce((s, p) => s + p.amount, 0) : docs.filter(d => !draft(d)).reduce((s, d) => s + Math.max(0, d.total - d.refund - d.unpaid), 0)),
       balance: r2(bal), open: openTotal, overdue: r2(open.filter(o => o.days_late > 0).reduce((s, o) => s + o.unpaid, 0)),
       // customer credit already netted off the open invoices above; what's left is an advance beyond every open invoice
       credit_applied: r2(credit0 - credit), unallocated: r2(bal - openTotal) },
     open,
     last_invoice: docs.length ? docs[docs.length - 1].date : null,
-    last_payment: pays.length ? pays[pays.length - 1].date : null,
+    last_payment: pays.filter(p => !isRet(p)).at(-1)?.date ?? null,
   };
 }
 
