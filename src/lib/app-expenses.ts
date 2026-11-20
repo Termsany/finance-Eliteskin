@@ -1,3 +1,4 @@
+import { nextMonth, prevMonth } from "@/lib/fmt";
 /**
  * Expenses kept in this app (not in Daftra) — the three kinds of the first version:
  *  fixed: every month from `start` until `stop` (exclusive) or forever
@@ -9,7 +10,6 @@ export type AppExpense = { id: number; name: string; cat: string; amount: number
 export const CATS = ["إيجار", "مرتبات", "تسويق", "مرافق", "أقساط", "صيانة", "اشتراكات", "أخرى"] as const;
 export const TYPE_LABEL: Record<AppExpense["type"], string> = { fixed: "ثابت كل شهر", temp: "مؤقت لمدة", once: "مرة واحدة" };
 
-const nextMonth = (m: string) => { let [y, mo] = m.split("-").map(Number); mo++; if (mo > 12) { mo = 1; y++; } return `${y}-${String(mo).padStart(2, "0")}`; };
 
 /** Is the expense due in month `m` (YYYY-MM)? */
 export function activeIn(e: AppExpense, m: string) {
@@ -41,7 +41,6 @@ export function toFixed(list: AppExpense[]) {
     start_month: `${e.start}-01`, end_month: e.type === "temp" ? `${e.end}-01` : e.stop ? `${prevMonth(e.stop)}-01` : null, notes: e.note,
     type: e.type as "fixed" | "temp" }));
 }
-const prevMonth = (m: string) => { let [y, mo] = m.split("-").map(Number); mo--; if (mo < 1) { mo = 12; y--; } return `${y}-${String(mo).padStart(2, "0")}`; };
 
 /** Validates a new expense from the form; returns an error message or the clean row. */
 export function cleanExpense(b: Record<string, unknown>): { error: string } | Omit<AppExpense, "id"> {

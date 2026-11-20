@@ -1,4 +1,5 @@
 import type { Input, computeFinance } from "@/lib/finance";
+import { r2 } from "@/lib/fmt";
 
 /** Account audit: automatic checks a CFO would run on the Daftra books. Pure — no I/O. */
 export type Severity = "high" | "medium" | "low";
@@ -7,7 +8,6 @@ export type Finding = { key: string; title: string; detail: string; amount: numb
 export type Check = { id: string; title: string; why: string; fix: string; severity: Severity; findings: Finding[] };
 export type DiscountLine = { invoice_id: number; item: string; discount: number; net: number };
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
 const VAT = 0.15;
 const WEIGHT: Record<Severity, number> = { high: 3, medium: 2, low: 1 };
 const median = (a: number[]) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };

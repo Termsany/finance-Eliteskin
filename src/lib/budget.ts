@@ -1,9 +1,9 @@
+import { r2 } from "@/lib/fmt";
 /**
  * The monthly budget picture: where this month's sales and net profit stand against the owner's targets
  * (adjusted for how far into the month we are), and the break-even sales — how much has to be sold to cover costs.
  * Pure: the API feeds it the current month's figures.
  */
-const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export type Target = {
   target: number | null; actual: number;

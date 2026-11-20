@@ -1,5 +1,6 @@
 import { pool, query } from "@/lib/db";
 import { daftraCfg, setSetting, type DaftraCfg } from "@/lib/settings";
+import { r2 } from "@/lib/fmt";
 
 /**
  * Daftra API client — strictly READ-ONLY (GET requests only). Nothing in the CRM ever writes to Daftra.
@@ -50,7 +51,6 @@ function tally<T>(xs: T[], label: (x: T) => string, amount: (x: T) => number) {
   return out;
 }
 const docTypes: Record<string, Record<string, { n: number; sum: number }>> = {};
-const r2 = (n: number) => Math.round(n * 100) / 100;
 /** Daftra returns ISO dates in lists but the account date format (dd/mm/yyyy) in details. */
 export function isoDate(v: unknown) { const s = String(v || "").trim(); const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`; const dmy = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/); return dmy ? `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}` : ""; }
 

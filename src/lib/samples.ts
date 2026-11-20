@@ -1,3 +1,4 @@
+import { r2, r3, prevMonth } from "@/lib/fmt";
 import { query } from "@/lib/db";
 
 /* ───────────── Types ───────────── */
@@ -9,9 +10,6 @@ export type PromoType = "pms" | "lunch" | "rtd" | "other";
 export const PROMO_LABELS: Record<PromoType, string> = { pms: "PMS", lunch: "دعوة غداء", rtd: "RTD", other: "أخرى" };
 
 /* ───────────── Helpers ───────────── */
-const r2 = (n: number) => Math.round(n * 100) / 100;
-const r3 = (n: number) => Math.round(n * 1000) / 1000;
-const prevMonth = (m: string) => { let [y, mo] = m.split("-").map(Number); mo--; if (mo < 1) { mo = 12; y--; } return `${y}-${String(mo).padStart(2, "0")}`; };
 
 /** Units sold for a product in a given month, net of refunds. */
 export async function productUnitsSold(productId: number, month: string): Promise<{ units: number; sales: number }> {

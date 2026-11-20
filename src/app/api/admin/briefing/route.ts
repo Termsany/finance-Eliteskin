@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { addDays } from "@/lib/fmt";
 import { getCurrentUser } from "@/lib/session";
 import { query } from "@/lib/db";
 import { computeFinance, loadInput, riyadhToday } from "@/lib/finance";
@@ -6,8 +7,6 @@ import { attention } from "@/lib/fin-books";
 import { collectionPlan, receivedIn } from "@/lib/collections";
 import { buildBriefing, type BriefingInput } from "@/lib/briefing";
 
-const DAY = 864e5;
-const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 
 /** Builds today's briefing snapshot from the live finance picture. Exported so the daily webhook push reuses it. */
 export async function buildTodayBriefing() {

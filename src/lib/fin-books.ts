@@ -1,12 +1,10 @@
+import { r2, addDays, daysBetween as days } from "@/lib/fmt";
 /** Pure helpers for the accounts page: party statements and the attention list. No I/O. */
 
 export type StDoc = { id: number; no: string; date: string; due_days: number; status: number; total: number; paid: number; unpaid: number; refund: number };
 export type StPay = { id: number; date: string; amount: number; invoice_id: number | null; method: string };
 export type StLine = { date: string; kind: "invoice" | "refund" | "payment"; ref: string; doc_id: number | null; debit: number; credit: number; balance: number; note: string };
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
-const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
-const days = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
 
 /**
  * Running statement. Customer: invoice = debit (they owe you), payment / refund = credit.

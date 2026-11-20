@@ -1,3 +1,4 @@
+import { r2 } from "@/lib/fmt";
 /**
  * Reconciliation of one customer with Daftra: what the mirror holds for them (invoices, payments by status and by
  * link, documents kept aside such as returns / drafts) and the balance a Daftra-style statement would show.
@@ -7,7 +8,6 @@ export type RcInvoice = { id: number; no: string; date: string; total: number; r
 export type RcPayment = { id: number; date: string; amount: number; invoice_id: number | null; status: string; method: string };
 export type RcOther = { id: number; no: string; date: string | null; type: string; total: number; draft: boolean };
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
 const sum = <T,>(xs: T[], f: (x: T) => number) => r2(xs.reduce((s, x) => s + f(x), 0));
 
 export function reconcile(inv: RcInvoice[], pays: RcPayment[], others: RcOther[]) {

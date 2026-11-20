@@ -1,8 +1,8 @@
 "use client";
 import type { AccData, Open, Tab } from "./AccountsHub";
 import { sar, pct, C, Card, MonthChart } from "./kit";
+import { addDays } from "@/lib/fmt";
 
-const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 /** % change against the previous period of the same length (null when there is nothing to compare). */
 const change = (now: number, before: number | undefined | null) => before === undefined || before === null || before === 0 ? null : (now - before) / Math.abs(before) * 100;
 
