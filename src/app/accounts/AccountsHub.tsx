@@ -16,21 +16,22 @@ import { AuditTab } from "./audit";
 import { AiAdvisor } from "./ai";
 import { Collections } from "./collections";
 import { Offsets } from "./offsets";
+import { SamplesTab } from "./samples";
 
 export type AccData = FinData & { attention?: Attention[] };
 /** Old tab names ("ar", "ap", "pricing") still work so restored links keep opening the right place. */
-export type Tab = "summary" | "collections" | "clients" | "suppliers" | "offsets" | "expenses" | "pnl" | "vat" | "cash" | "products" | "audit" | "ar" | "ap" | "pricing" | "advisor" | "sales";
+export type Tab = "summary" | "collections" | "clients" | "suppliers" | "offsets" | "expenses" | "pnl" | "vat" | "cash" | "samples" | "products" | "audit" | "ar" | "ap" | "pricing" | "advisor" | "sales";
 export type Open = (kind: PartyKind, name: string) => void;
 const ALIAS: Partial<Record<Tab, Tab>> = { ar: "clients", ap: "suppliers", pricing: "products", advisor: "summary", sales: "clients" };
 const TABS: Array<[Tab, string, string]> = [["summary", "الملخص", "dashboard"], ["collections", "التحصيل", "time"], ["clients", "العملاء", "doctors"], ["suppliers", "الموردين", "send"], ["offsets", "مقاصة الموردين", "repeat"], ["expenses", "المصروفات", "wallet"],
-  ["pnl", "الأرباح والخسائر", "reports"], ["vat", "الضريبة", "file"], ["cash", "السيولة", "time"], ["products", "المنتجات والأسعار", "products"], ["audit", "مراجعة الحسابات", "check"]];
+  ["pnl", "الأرباح والخسائر", "reports"], ["vat", "الضريبة", "file"], ["cash", "السيولة", "time"], ["samples", "العينات والدعاية", "samples"], ["products", "المنتجات والأسعار", "products"], ["audit", "مراجعة الحسابات", "check"]];
 const EXCEL: Partial<Record<Tab, string>> = { summary: "summary", clients: "ar", suppliers: "ap", expenses: "pnl", pnl: "pnl", vat: "summary", products: "pricing" };
 const CHIPS = ["لخّص لي وضع الفلوس في 5 سطور: الربح، المصروفات، اللي ليا وعليا، وأهم 3 حاجات أعملها", "مين العملاء اللي أحصّل منهم الأسبوع ده وأقول لكل واحد إيه؟", "أنهي مصروفات زادت وأوفّر فيها إزاي؟", "أنهي منتجات بتكسبني أكتر وأنهي بتخسرني؟"];
 const SUB: Partial<Record<Tab, string>> = { summary: "نظرة سريعة على فلوس الشركة — من دفترة", collections: "المطلوب تحصيله أو دفعه الشهر ده: المتأخر واللي في ميعاده",
   clients: "اللي ليك عند العملاء وكشف حساب كل عميل", suppliers: "اللي عليك للموردين وكشف حساب كل مورد", offsets: "فروق الأسعار اللي الموردين بيخصموها — متابعة لكل أوردر لحد المقاصة", expenses: "مصروفات دفترة ومصروفات البرنامج",
   pnl: "قائمة الدخل شهر بشهر", vat: "ضريبة القيمة المضافة شهر بشهر", cash: "الفلوس الداخلة والخارجة في الـ 13 أسبوع الجايين",
-  products: "الأسعار والتكلفة والمخزون", audit: "فحوصات تلقائية على قيود دفترة" };
-const NO_RANGE: Partial<Record<Tab, boolean>> = { collections: true, clients: true, suppliers: true, offsets: true, cash: true };
+  samples: "متابعة عينات المناديب ومصروفات الدعاية", products: "الأسعار والتكلفة والمخزون", audit: "فحوصات تلقائية على قيود دفترة" };
+const NO_RANGE: Partial<Record<Tab, boolean>> = { collections: true, clients: true, suppliers: true, offsets: true, cash: true, samples: true };
 
 const tz = "Asia/Riyadh";
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
@@ -132,6 +133,7 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
         {tab === "pnl" && <Pnl d={d} pickMonth={pickMonth} />}
         {tab === "vat" && <Vat d={d} />}
         {tab === "cash" && <CashTab go={go} />}
+        {tab === "samples" && <SamplesTab />}
         {tab === "products" && <Products d={d} reload={load} subdomain={subdomain} x={x} />}
         {tab === "audit" && <AuditTab range={range} subdomain={subdomain} go={go} />}
       </div>}

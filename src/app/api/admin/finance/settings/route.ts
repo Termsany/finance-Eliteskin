@@ -8,14 +8,14 @@ const admin = async () => { const u = await getCurrentUser(); return u && u.role
 
 export async function GET() {
   if (!(await admin())) return forbid();
-  const r = await query("SELECT target_gross_margin::float8, target_net_margin::float8, books_start::text, cash_balance::float8, cash_as_of::text, monthly_sales_target::float8, monthly_profit_target::float8 FROM fin_settings WHERE id=1");
+  const r = await query("SELECT target_gross_margin::float8, target_net_margin::float8, books_start::text, cash_balance::float8, cash_as_of::text, monthly_sales_target::float8, monthly_profit_target::float8, sample_pct::float8, promo_pct::float8 FROM fin_settings WHERE id=1");
   return NextResponse.json(r.rows[0] || {});
 }
 
 /** Any of: target margins (both together), books start (a date, or null for "count everything"). */
 export async function PUT(req: Request) {
   const u = await admin(); if (!u) return forbid();
-  const b = await req.json().catch(() => null) as { target_gross_margin?: unknown; target_net_margin?: unknown; books_start?: unknown; monthly_sales_target?: unknown; monthly_profit_target?: unknown } | null;
+  const b = await req.json().catch(() => null) as { target_gross_margin?: unknown; target_net_margin?: unknown; books_start?: unknown; monthly_sales_target?: unknown; monthly_profit_target?: unknown; sample_pct?: unknown; promo_pct?: unknown } | null;
   if (!b) return NextResponse.json({ error: "طلب غير صحيح" }, { status: 400 });
   if (b.monthly_sales_target !== undefined || b.monthly_profit_target !== undefined) {
     const parse = (v: unknown) => { if (v === null || v === "") return null; const n = Number(v); return Number.isFinite(n) && n >= 0 && n < 1e10 ? Math.round(n * 100) / 100 : NaN; };
@@ -33,6 +33,14 @@ export async function PUT(req: Request) {
     if (v !== null && !DAY.test(v)) return NextResponse.json({ error: "تاريخ غير صحيح" }, { status: 400 });
     await query("UPDATE fin_settings SET books_start=$1, updated_at=now() WHERE id=1", [v]);
     await query("INSERT INTO audit_logs(actor_id, action, entity, entity_id) VALUES($1,'books_start_change','fin_settings',$1)", [u.id]).catch(() => {});
+  }
+  if (b.sample_pct !== undefined || b.promo_pct !== undefined) {
+    const sp = b.sample_pct !== undefined ? Number(b.sample_pct) : NaN;
+    const pp = b.promo_pct !== undefined ? Number(b.promo_pct) : NaN;
+    if (b.sample_pct !== undefined && (!(sp >= 0 && sp <= 100))) return NextResponse.json({ error: "نسبة العينات لازم تكون بين 0 و 100" }, { status: 400 });
+    if (b.promo_pct !== undefined && (!(pp >= 0 && pp <= 100))) return NextResponse.json({ error: "نسبة الدعاية لازم تكون بين 0 و 100" }, { status: 400 });
+    if (b.sample_pct !== undefined) await query("UPDATE fin_settings SET sample_pct=$1, updated_at=now() WHERE id=1", [sp]);
+    if (b.promo_pct !== undefined) await query("UPDATE fin_settings SET promo_pct=$1, updated_at=now() WHERE id=1", [pp]);
   }
   return NextResponse.json({ ok: true });
 }
