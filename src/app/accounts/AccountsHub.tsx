@@ -124,7 +124,7 @@ export default function AccountsHub({ subdomain }: { subdomain: string }) {
 
     {!d ? <div className="grid gap-3 sm:grid-cols-4">{[0, 1, 2, 3].map(i => <div key={i} className="h-28 animate-pulse rounded-2xl bg-[var(--card)]" />)}</div>
       : <div className={`transition-opacity ${loading ? "opacity-50" : ""}`}>
-        {tab === "summary" && <Summary d={d} go={go} open={open} pickMonth={pickMonth} />}
+        {tab === "summary" && <Summary d={d} go={go} open={open} pickMonth={pickMonth} askAi={askAi} />}
         {tab === "collections" && <Collections today={d.today} subdomain={subdomain} open={open} ask={askAi} />}
         {tab === "clients" && <Parties d={d} kind="client" open={open} x={x} />}
         {tab === "suppliers" && <Parties d={d} kind="supplier" open={open} x={x} />}

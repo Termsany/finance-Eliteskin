@@ -19,7 +19,7 @@ export const Delta = ({ v, inverse = false }: { v: number | null; inverse?: bool
 
 const LV: Record<string, [string, string]> = { danger: ["bg-red-50", "bg-red-600"], warn: ["bg-amber-50", "bg-amber-500"], info: ["bg-[var(--sky-light)]", "bg-[var(--navy)]"] };
 
-export function Summary({ d, go, open, pickMonth }: { d: AccData; go: (t: Tab) => void; open: Open; pickMonth: (m: string) => void }) {
+export function Summary({ d, go, open, pickMonth, askAi }: { d: AccData; go: (t: Tab) => void; open: Open; pickMonth: (m: string) => void; askAi?: (q: string) => void }) {
   const k = d.kpi, p = d.prev;
   const week = addDays(d.today, 7);
   const apWeek = d.ap.open.filter(o => o.due <= week).reduce((s, o) => s + o.unpaid, 0);
@@ -57,7 +57,10 @@ export function Summary({ d, go, open, pickMonth }: { d: AccData; go: (t: Tab) =
         <div className="space-y-2">{att.map((a, i) => { const [box, dot] = LV[a.level] || LV.info; return <div key={i} className={`flex items-center gap-3 rounded-2xl px-3.5 py-3 ${box}`}>
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
           <div className="min-w-0 flex-1"><div className="text-[14px] font-bold text-[var(--ink)]">{a.title}</div><div className="text-[12px] text-[var(--muted)]">{a.text}</div></div>
-          <button type="button" onClick={() => a.party && a.kind ? open(a.kind, a.party) : go(a.tab as Tab)} className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-bold text-[var(--navy)]">افتح ‹</button>
+          <div className="flex shrink-0 gap-1.5">
+            {askAi && <button type="button" onClick={() => askAi(a.title)} className="rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--navy)]">اسأل ‹</button>}
+            <button type="button" onClick={() => a.party && a.kind ? open(a.kind, a.party) : go(a.tab as Tab)} className="rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-bold text-[var(--navy)]">افتح ‹</button>
+          </div>
         </div>; })}</div>
       </Card>
     </div>

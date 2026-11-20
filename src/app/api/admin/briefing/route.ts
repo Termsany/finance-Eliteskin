@@ -30,6 +30,9 @@ export async function buildTodayBriefing() {
     ar_total: fin.ar.total, ap_week,
     balance: bal?.cash_balance ?? null,
     net_month: fin.kpi.net, sales_month: fin.kpi.sales,
+    gross_margin: fin.kpi.sales > 0 ? (fin.kpi.sales - fin.kpi.cogs) / fin.kpi.sales * 100 : null,
+    sales_target: (await query<{ monthly_sales_target: number | null }>("SELECT monthly_sales_target::float8 FROM fin_settings WHERE id=1").catch(() => ({ rows: [] }))).rows[0]?.monthly_sales_target ?? null,
+    profit_target: (await query<{ monthly_profit_target: number | null }>("SELECT monthly_profit_target::float8 FROM fin_settings WHERE id=1").catch(() => ({ rows: [] }))).rows[0]?.monthly_profit_target ?? null,
     due_promises: promises.map(p => ({ customer: p.customer, amount: p.promise_amount })),
     urgent: todo.slice(0, 3).map(t => ({ title: t.title })),
   };
