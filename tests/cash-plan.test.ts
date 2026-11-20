@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { simulate, financeTerm, planRows, cashPlan, annuity, unitNet, type PlanInputs, type PlanOpts } from "@/lib/cash-plan";
+import { simulate, financeTerm, planRows, cashPlan, annuity, unitNet, manualFinance, type PlanInputs, type PlanOpts } from "@/lib/cash-plan";
 
 // 16 Nov: 15 of 30 days left → this month's expenses are half
 const p: PlanInputs = {
@@ -9,8 +9,9 @@ const p: PlanInputs = {
   offsets: {}, vat_due: 0,
   base: { sales: 100000, cogs_ratio: 0.5, opex: 30000, months: 12 },
   lag_in: 1, lag_out: 1, dso: 45,
+  plan_cogs_ratio: 0.5, products: [],
 };
-const o: PlanOpts = { sales: 100000, collect: 0.9, cut: 0, deferAp: 0, lagIn: 1, buffer: 0, rate: 10, grace: 0 };
+const o: PlanOpts = { sales: 100000, collect: 0.9, cut: 0, deferAp: 0, lagIn: 1, buffer: 0, rate: 10, grace: 0, cogsRatio: 0.5, financing: null };
 
 describe("simulate", () => {
   it("collects 90% of overdue, half now and half next month; this month's expenses pro rata", () => {
@@ -72,10 +73,29 @@ describe("cashPlan", () => {
     expect(plan.suggestion).toMatchObject({ raised: false, sales: o.sales });
   });
   it("cash a riyal of sales leaves after cost and VAT = the gross margin", () => {
-    expect(unitNet(p)).toBeCloseTo(0.5);
+    expect(unitNet(p, o.cogsRatio)).toBeCloseTo(0.5);
   });
   it("annuity: zero rate is a straight split", () => {
     expect(annuity(0, 12)).toBeCloseTo(1 / 12);
     expect(annuity(12, 12)).toBeCloseTo(0.08885, 4);
+  });
+});
+
+describe("editable cost ratio and manual financing", () => {
+  it("a lower cost ratio means smaller supplier payments for new sales", () => {
+    const hi = simulate(p, o, 1000, 12).nout[2];
+    const lo = simulate(p, { ...o, cogsRatio: 0.3 }, 1000, 12).nout[2];
+    expect(hi).toBeCloseTo(1000 * 1.15 * 0.5);
+    expect(lo).toBeCloseTo(1000 * 1.15 * 0.3);
+    expect(lo).toBeLessThan(hi);
+  });
+  it("manual financing: the owner's amount is placed at the first short month and keeps the floor if big enough", () => {
+    const small = manualFinance(p, o, o.sales, 5000, 12);
+    expect(small.ok).toBe(false);                 // 5,000 is too little
+    const auto = financeTerm(p, o, 12);
+    const big = manualFinance(p, o, o.sales, auto.F, 12);
+    expect(big.ok).toBe(true);                    // the computed smallest works
+    expect(big.installment).toBe(Math.round(auto.F * annuity(10, 12)));
+    expect(big.f0).toBe(auto.f0);
   });
 });

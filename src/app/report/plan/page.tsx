@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { cashPlan, planRows } from "@/lib/cash-plan";
+import { cashPlan, planRows, manualFinance } from "@/lib/cash-plan";
 import { loadPlanInputs, readOpts } from "@/lib/cash-plan-data";
 import { monthLabel } from "@/lib/collections";
 import PrintBar from "./PrintBar";
@@ -16,10 +16,12 @@ export default async function PlanReport({ searchParams }: { searchParams: Promi
   const p = await loadPlanInputs();
   let o = readOpts(p, sp);
   let plan = cashPlan(p, o);
-  // these sales can't repay any financing: print the suggested plan (sales raised to the level that works) instead
-  if (plan.suggestion?.raised) { o = { ...o, sales: plan.suggestion.sales }; plan = cashPlan(p, o); }
+  // a financing amount the owner typed overrides the auto plan; otherwise, if their sales can't repay anything,
+  // print the suggested plan (sales raised to the level that works)
+  const man = o.financing ? manualFinance(p, o, o.sales, o.financing.F, o.financing.n) : null;
+  if (!man && plan.suggestion?.raised) { o = { ...o, sales: plan.suggestion.sales }; plan = cashPlan(p, o); }
   const sel = plan.terms.find(t => t.n === Number(sp.term) && t.feasible) || plan.terms.find(t => t.n === (plan.suggestion?.n ?? plan.recommended)) || null;
-  const fin = sel && sel.needed && sel.feasible ? sel : null;
+  const fin = man ?? (sel && sel.needed && sel.feasible ? sel : null);
   const rows = planRows(p, o, o.sales, fin ? { F: fin.F, n: fin.n, f0: fin.f0 } : null, fin ? fin.H : 12);
   const fmt = (x: Date, op: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Asia/Riyadh", ...op }).format(x);
 
@@ -61,7 +63,7 @@ export default async function PlanReport({ searchParams }: { searchParams: Promi
         {plan.needs_help ? <>من غير حل، الرصيد بينزل تحت {o.buffer ? "الاحتياطي" : "الصفر"} في <b>{plan.first_short}</b> ويوصل <b>{k(plan.lowest.balance)} ر.س</b> في {plan.lowest.label}. </> : <>مفيش عجز متوقع بالمبيعات دي. </>}
         {plan.no_finance.possible ? <>من غير تمويل: محتاج مبيعات <b>{k(plan.no_finance.sales)} ر.س</b> شهرياً. </> : <>المبيعات لوحدها مش هتلحق العجز في {plan.no_finance.blocked.slice(0, 2).map(monthLabel).join(" و ")} (التحصيل بعد {o.lagIn} شهر). </>}
         {!fin && plan.suggestion && <>الخطة المقترحة: مبيعات <b>{k(plan.suggestion.sales)} ر.س</b> شهرياً + تمويل <b>{k(plan.suggestion.F)} ر.س</b> على {plan.suggestion.n} شهر بقسط {k(plan.suggestion.installment)} ر.س. </>}
-        {fin && <>بالتمويل: استلام <b>{k(fin.F)} ر.س</b> في {fin.start}، وسداد {fin.n} قسط × <b>{k(fin.installment)} ر.س</b> من {fin.first_payment} لـ {fin.last_payment} (تكلفة التمويل {k(fin.cost)} ر.س بنسبة {o.rate}% سنوياً). المبيعات اللي تشيل المصاريف والقسط: <b>{k(fin.carry_sales)} ر.س</b> شهرياً.</>}
+        {fin && <>بالتمويل{man ? " (بمبلغك)" : ""}: استلام <b>{k(fin.F)} ر.س</b> في {fin.start}، وسداد {fin.n} قسط × <b>{k(fin.installment)} ر.س</b> من {fin.first_payment} لـ {fin.last_payment} (تكلفة التمويل {k(fin.cost)} ر.س بنسبة {o.rate}% سنوياً).{!man && "carry_sales" in fin && fin.carry_sales ? <> المبيعات اللي تشيل المصاريف والقسط: <b>{k(fin.carry_sales)} ر.س</b> شهرياً.</> : man && !man.ok ? <> <b style={{ color: C.red }}>المبلغ ده مش كفاية — أقل رصيد متوقع {k(man.min_balance)} ر.س.</b></> : ""}</>}
       </div>
 
       {plan.needs_help && <><b style={{ fontSize: "11pt" }}>أقل تمويل لكل مدة</b>
@@ -80,7 +82,7 @@ export default async function PlanReport({ searchParams }: { searchParams: Promi
           <td className="n" style={{ fontWeight: 800, color: r.balance < o.buffer ? C.red : C.navy }}>{k(r.balance)}</td></tr>)}</tbody></table>
 
       <div style={{ marginTop: 12, paddingTop: 6, borderTop: `1px solid ${C.border}`, fontSize: "8pt", color: C.muted }}>
-        تقديرات مبنية على: متوسط المبيعات {k(p.base.sales)} ر.س شهرياً، تكلفة البضاعة {Math.round(p.base.cogs_ratio * 100)}% من المبيعات، مصاريف {k(p.base.opex * (1 - o.cut / 100))} ر.س شهرياً{o.cut ? ` (بعد تخفيض ${o.cut}%)` : ""}، تحصيل {Math.round(o.collect * 100)}% من الفواتير المفتوحة مهما كان تأخيرها، والمبيعات الجديدة بتتحصّل كاملة بعد {o.lagIn} شهر. المبالغ شاملة الضريبة حيث بتتحرك الفلوس. التمويل بقسط ثابت{o.grace ? ` بعد ${o.grace} شهر سماح` : ""}.
+        تقديرات مبنية على: متوسط المبيعات {k(p.base.sales)} ر.س شهرياً، تكلفة شراء البضاعة {Math.round(o.cogsRatio * 100)}% من المبيعات الجديدة، مصاريف {k(p.base.opex * (1 - o.cut / 100))} ر.س شهرياً{o.cut ? ` (بعد تخفيض ${o.cut}%)` : ""}، تحصيل {Math.round(o.collect * 100)}% من الفواتير المفتوحة مهما كان تأخيرها، والمبيعات الجديدة بتتحصّل كاملة بعد {o.lagIn} شهر. المبالغ شاملة الضريبة حيث بتتحرك الفلوس. التمويل بقسط ثابت{o.grace ? ` بعد ${o.grace} شهر سماح` : ""}.
       </div>
     </div>
   </div>;
