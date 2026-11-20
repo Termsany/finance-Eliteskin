@@ -127,12 +127,59 @@ export function StatementDrawer({ kind, name, subdomain, onClose }: { kind: Part
                 <td className="p-2 text-center tabular-nums text-emerald-700">{down ? num(down, 2) : ""}</td>
                 <td className="p-2 text-center font-extrabold tabular-nums">{num(l.balance, 2)}</td></tr>; })}
                 {!lines.length && <tr><td colSpan={5} className="p-4 text-center text-[var(--muted)]">مفيش حركة</td></tr>}</tbody></table></div>
+            {isC && <ReconcilePanel customer={name} appBalance={s.totals.open} />}
             {!isC && <div className="mt-1.5 text-[11px] text-[var(--muted)]">دفعات الموردين مش بتتسحب من دفترة، فالمدفوع من كل فاتورة شراء ظاهر في نفس يومها.</div>}
           </div>
         </>}
       </div>
     </aside>
   </div>, document.body);
+}
+
+type Rc = { client_ids: number[]; balance: number; unapplied: number; hints: string[];
+  invoices: { n: number; invoiced: number; refunds: number; paid_on_invoices: number; unpaid: number };
+  payments: { n: number; received: number; linked: { n: number; sum: number }; unlinked: { n: number; sum: number }; to_missing: { n: number; sum: number }; skipped: Record<string, { n: number; sum: number }> };
+  others: Record<string, { n: number; sum: number }>;
+  other_docs: Array<{ id: number; no: string; date: string | null; type: string; total: number; draft: boolean }>;
+  sync: { at?: string; payments?: { total: number; by_status: Record<string, { n: number; sum: number }>; linked: { n: number; sum: number }; unlinked: { n: number; sum: number }; no_client: number } } | null };
+
+/** Everything the app got from Daftra for this customer, next to Daftra's own statement balance, to find a mismatch. */
+function ReconcilePanel({ customer, appBalance }: { customer: string; appBalance: number }) {
+  const [on, setOn] = useState(false); const [r, setR] = useState<Rc | null>(null); const [err, setErr] = useState<string | null>(null); const [dft, setDft] = useState("");
+  useEffect(() => {
+    if (!on || r) return;
+    fetch(`/api/admin/finance/reconcile?name=${encodeURIComponent(customer)}`, { cache: "no-store" }).then(async x => { const j = await x.json().catch(() => null); if (x.ok && j) setR(j); else setErr(j?.error || "تعذر التحميل"); }).catch(() => setErr("تعذر التحميل"));
+  }, [on, r, customer]);
+  const d = Number(dft.replace(/,/g, "")); const diff = dft && Number.isFinite(d) && r ? Math.round((r.balance - d) * 100) / 100 : null;
+  const row = (l: string, v: string, cls = "") => <div className="flex items-center justify-between gap-2 py-1"><span className="text-[var(--muted)]">{l}</span><b className={`tabular-nums ${cls}`}>{v}</b></div>;
+  return <div className="mt-3 rounded-2xl border border-dashed border-[var(--border)] p-3 text-[12.5px]">
+    <button type="button" onClick={() => setOn(!on)} className="flex w-full items-center justify-between text-sm font-extrabold"><span>مراجعة الربط مع دفترة</span><span className="text-[var(--muted)]">{on ? "▲" : "▼"}</span></button>
+    {on && <div className="mt-2 space-y-2">
+      {err && <div className="rounded-xl bg-red-50 p-2 text-red-800">{err}</div>}
+      {!r && !err && <div className="h-16 animate-pulse rounded-xl bg-[var(--bg)]" />}
+      {r && <>
+        <div className="divide-y divide-[var(--border)]">
+          {row(`الفواتير (${r.invoices.n})`, sar(r.invoices.invoiced))}
+          {row("مرتجعات على الفواتير", `− ${sar(r.invoices.refunds)}`)}
+          {row(`الدفعات المستلمة (${r.payments.n})`, `− ${sar(r.payments.received)}`, "text-emerald-700")}
+          {row(`  منها مربوطة بفواتير (${r.payments.linked.n})`, sar(r.payments.linked.sum))}
+          {row(`  منها مش مربوطة (${r.payments.unlinked.n})`, sar(r.payments.unlinked.sum))}
+          {row("الرصيد حسب الحركة اللي وصلت", sar(r.balance), "text-[var(--navy)]")}
+          {row("الرصيد المعروض في البرنامج", sar(appBalance))}
+        </div>
+        <label className="flex flex-wrap items-center gap-2"><span className="text-[var(--muted)]">رصيد نهاية المدة في كشف دفترة:</span>
+          <input value={dft} onChange={e => setDft(e.target.value)} inputMode="decimal" dir="ltr" placeholder="مثلاً 57641.25" className="w-32 rounded-lg border border-[var(--border)] px-2 py-1.5" /></label>
+        {diff !== null && (Math.abs(diff) < 1
+          ? <div className="rounded-xl bg-emerald-50 p-2 text-emerald-900">✓ مطابق لدفترة.</div>
+          : <div className="rounded-xl bg-amber-50 p-2 text-amber-900">الفرق {sar(Math.abs(diff))} — البرنامج {diff > 0 ? "أعلى" : "أقل"} من دفترة. {diff > 0 ? "غالباً مرتجع/إشعار دائن أو دفعة ما وصلتش." : "غالباً فاتورة ما وصلتش أو دفعة محسوبة زيادة."}</div>)}
+        {r.hints.map((h, i) => <div key={i} className="rounded-xl bg-amber-50 p-2 text-amber-900">{h}</div>)}
+        {r.other_docs.length > 0 && <div><div className="mb-1 font-bold">مستندات تانية من دفترة للعميل</div>
+          {r.other_docs.map(o => <div key={o.id} className="flex justify-between gap-2 py-0.5"><span dir="ltr">{o.no || o.id}</span><span>{o.date || "—"}</span><span>نوع {o.type}{o.draft ? " · مسودة" : ""}</span><b className="tabular-nums">{sar(o.total)}</b></div>)}</div>}
+        {r.sync?.payments && <div className="text-[11px] text-[var(--muted)]">آخر مزامنة {r.sync.at?.slice(0, 16).replace("T", " ")}: {r.sync.payments.total} دفعة في دفترة كلها ({r.sync.payments.unlinked.n} مش مربوطة بفواتير) · الحالات: {Object.entries(r.sync.payments.by_status).map(([k, v]) => `${k}: ${v.n}`).join("، ")}</div>}
+        <a href={`/api/admin/daftra/debug?name=${encodeURIComponent(customer)}`} className="inline-block rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-bold text-[var(--navy)]">نزّل بيانات العميل الخام من دفترة</a>
+      </>}
+    </div>}
+  </div>;
 }
 
 /** Follow-up log and payment promises for one customer. */
