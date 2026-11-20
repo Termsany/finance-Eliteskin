@@ -4,7 +4,7 @@ import { nextMonth, prevMonth } from "@/lib/fmt";
  *  fixed: every month from `start` until `stop` (exclusive) or forever
  *  temp:  every month from `start` to `end` (inclusive)
  *  once:  one payment on `date`
- * They feed the P&L as operating expenses, and fixed/temp ones are the monthly fixed costs for planning and cash.
+ * For forecasting and cash planning only — actual expenses come from Daftra. Fixed/temp ones are the monthly fixed costs for break-even and cash forecast.
  */
 export type AppExpense = { id: number; name: string; cat: string; amount: number; type: "fixed" | "temp" | "once"; start: string | null; end: string | null; stop: string | null; date: string | null; note: string };
 export const CATS = ["إيجار", "مرتبات", "تسويق", "مرافق", "أقساط", "صيانة", "اشتراكات", "أخرى"] as const;
