@@ -34,17 +34,25 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
   let bal = 0;
   const sign = kind === "client" ? 1 : -1; // positive = they owe you (client) / you owe them (supplier)
   const out: StLine[] = lines.map(l => { bal += sign * (l.debit - l.credit); return { ...l, debit: r2(l.debit), credit: r2(l.credit), balance: r2(bal) }; });
-  const open = docs.filter(d => !draft(d) && d.unpaid > 0 && (d.status === 0 || d.status === 1)).map(d => {
-    const due = addDays(d.date, d.due_days || 0); return { id: d.id, no: d.no, date: d.date, due, unpaid: r2(d.unpaid), days_late: Math.max(0, days(due, today)) };
-  }).sort((a, b) => b.days_late - a.days_late);
+  // a customer's payments Daftra didn't apply to an invoice still owe nothing — net them off the open invoices, oldest first
+  const allocPaid = docs.filter(d => !draft(d)).reduce((s, d) => s + Math.max(0, d.total - d.refund - d.unpaid), 0);
+  const totalPaid = pays.reduce((s, p) => s + p.amount, 0);
+  let credit = kind === "client" ? Math.max(0, r2(totalPaid - allocPaid)) : 0;
+  const credit0 = credit;
+  const open = docs.filter(d => !draft(d) && d.unpaid > 0 && (d.status === 0 || d.status === 1))
+    .map(d => ({ id: d.id, no: d.no, date: d.date, due: addDays(d.date, d.due_days || 0), unpaid: d.unpaid }))
+    .sort((a, b) => a.due.localeCompare(b.due) || a.date.localeCompare(b.date))   // oldest first for FIFO
+    .map(o => { let u = o.unpaid; if (credit > 0) { const used = Math.min(credit, u); u = r2(u - used); credit = r2(credit - used); } return { ...o, unpaid: r2(u), days_late: Math.max(0, days(o.due, today)) }; })
+    .filter(o => o.unpaid > 0)
+    .sort((a, b) => b.days_late - a.days_late);
   const openTotal = r2(open.reduce((s, o) => s + o.unpaid, 0));
   return {
     lines: out,
     totals: { invoiced: r2(docs.filter(d => !draft(d)).reduce((s, d) => s + d.total, 0)), refunds: r2(docs.reduce((s, d) => s + d.refund, 0)),
       paid: r2(kind === "client" ? pays.reduce((s, p) => s + p.amount, 0) : docs.filter(d => !draft(d)).reduce((s, d) => s + Math.max(0, d.total - d.refund - d.unpaid), 0)),
       balance: r2(bal), open: openTotal, overdue: r2(open.filter(o => o.days_late > 0).reduce((s, o) => s + o.unpaid, 0)),
-      // payments Daftra didn't tie to an invoice (or an advance) make the running balance differ from the open invoices
-      unallocated: r2(bal - openTotal) },
+      // customer credit already netted off the open invoices above; what's left is an advance beyond every open invoice
+      credit_applied: r2(credit0 - credit), unallocated: r2(bal - openTotal) },
     open,
     last_invoice: docs.length ? docs[docs.length - 1].date : null,
     last_payment: pays.length ? pays[pays.length - 1].date : null,

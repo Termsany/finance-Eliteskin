@@ -32,6 +32,22 @@ export const norm = (s: string) => s.toLowerCase().replace(/[\s\-_()]+/g, " ").r
 const keep = (d: Doc) => d.total > 0 ? Math.max(0, 1 - d.refund / d.total) : 1;
 export function monthsBetween(from: string, to: string) { const out: string[] = []; let [y, m] = from.slice(0, 7).split("-").map(Number); const [ty, tm] = to.slice(0, 7).split("-").map(Number); while ((y < ty || (y === ty && m <= tm)) && out.length < 120) { out.push(`${y}-${String(m).padStart(2, "0")}`); if (m === 12) { y++; m = 1; } else m++; } return out; }
 export function bucket(daysPastDue: number) { return daysPastDue <= 0 ? "current" : daysPastDue <= 30 ? "1-30" : daysPastDue <= 60 ? "31-60" : daysPastDue <= 90 ? "61-90" : "90+"; }
+
+/**
+ * Per-customer credit that Daftra received but did not apply to any invoice (so the invoices still read unpaid):
+ * total client payments minus the paid part Daftra recorded on the invoices, by customer name. Positive only.
+ */
+export function unallocatedCredit(sales: Doc[], payments: Array<{ amount: number; client_id: number | string | null }>) {
+  // client_id comes from Postgres as a string (bigint) while party_id is a number — coerce both so the keys match
+  const idName = new Map<number, string>();
+  for (const d of sales) if (d.party_id != null) idName.set(Number(d.party_id), d.party);
+  const paid = new Map<number, number>(), alloc = new Map<number, number>();
+  for (const p of payments) if (p.client_id != null && p.client_id !== "") { const id = Number(p.client_id); if (Number.isFinite(id)) paid.set(id, (paid.get(id) || 0) + p.amount); }
+  for (const d of sales) if (d.party_id != null) alloc.set(Number(d.party_id), (alloc.get(Number(d.party_id)) || 0) + Math.max(0, d.total - d.refund - d.unpaid));
+  const credit = new Map<string, number>();
+  for (const [id, name] of idName) { const c = (paid.get(id) || 0) - (alloc.get(id) || 0); if (c > 0.01) credit.set(name, Math.round((((credit.get(name) || 0) + c)) * 100) / 100); }
+  return credit;
+}
 export const BUCKETS = ["current", "1-30", "31-60", "61-90", "90+"] as const;
 
 /** Account treatment: explicit override, else chart-of-accounts code (51xx = cost of sales, 5xxx = operating expense, anything else — treasury, partner, VAT, custody, clients — is not a P&L expense). */
@@ -134,22 +150,39 @@ export function computeFinance(inp: Input, from0: string, to: string) {
   let collected = 0;
   for (const p of inp.payments) if (inR(p.date)) { collected += p.amount; const mm = M.get(month(p.date)); if (mm) mm.collected += p.amount; }
 
-  // ── receivables / payables (as of today, all open documents)
-  const ageBook = (docs: Doc[]) => {
+  // customers' unapplied credit: money received (client_payments) beyond what Daftra applied to their invoices.
+  // Daftra leaves such a payment off the invoice's `unpaid`, so without this the balance stays overstated.
+  const creditByName = unallocatedCredit(inp.sales, inp.payments);
+
+  // ── receivables / payables (as of today, all open documents). `credit` (by party) is netted oldest-invoice-first.
+  const ageBook = (docs: Doc[], credit?: Map<string, number>) => {
     const parties = new Map<string, { name: string; unpaid: number; overdue: number; n: number; oldestDue: number; b: Record<string, number> }>();
     const totals: Record<string, number> = Object.fromEntries(BUCKETS.map(b => [b, 0]));
     const open: Array<{ id: number; no: string; date: string; party: string; unpaid: number; due: string; days: number }> = [];
+    // group each party's open invoices, then subtract their credit oldest-due first
+    const byParty = new Map<string, Array<{ d: Doc; due: string; days: number }>>();
     for (const d of docs) {
       if (!(d.unpaid > 0) || !(d.payment_status === 0 || d.payment_status === 1)) continue;
-      const due = addDays(d.date, d.due_days), days = daysBetween(due, inp.today), bk = bucket(days);
-      totals[bk] += d.unpaid; open.push({ id: d.id, no: d.no, date: d.date, party: d.party, unpaid: d.unpaid, due, days });
-      const p = parties.get(d.party) || { name: d.party, unpaid: 0, overdue: 0, n: 0, oldestDue: 0, b: Object.fromEntries(BUCKETS.map(b => [b, 0])) };
-      p.unpaid += d.unpaid; p.n++; p.b[bk] += d.unpaid; if (days > 0) p.overdue += d.unpaid; p.oldestDue = Math.max(p.oldestDue, days); parties.set(d.party, p);
+      const due = addDays(d.date, d.due_days), days = daysBetween(due, inp.today);
+      (byParty.get(d.party) || byParty.set(d.party, []).get(d.party)!).push({ d, due, days });
+    }
+    for (const [name, list] of byParty) {
+      list.sort((a, b) => a.due.localeCompare(b.due) || b.d.date.localeCompare(a.d.date));   // oldest first
+      let c = credit?.get(name) || 0;
+      for (const { d, due, days } of list) {
+        let u = d.unpaid;
+        if (c > 0) { const used = Math.min(c, u); u = r2(u - used); c = r2(c - used); }
+        if (!(u > 0)) continue;   // fully covered by the customer's credit
+        const bk = bucket(days);
+        totals[bk] += u; open.push({ id: d.id, no: d.no, date: d.date, party: name, unpaid: u, due, days });
+        const p = parties.get(name) || { name, unpaid: 0, overdue: 0, n: 0, oldestDue: 0, b: Object.fromEntries(BUCKETS.map(b => [b, 0])) };
+        p.unpaid += u; p.n++; p.b[bk] += u; if (days > 0) p.overdue += u; p.oldestDue = Math.max(p.oldestDue, days); parties.set(name, p);
+      }
     }
     const total = Object.values(totals).reduce((s, v) => s + v, 0);
     return { total: r2(total), overdue: r2(total - totals.current), buckets: totals, parties: [...parties.values()].map(p => ({ ...p, unpaid: r2(p.unpaid), overdue: r2(p.overdue), b: Object.fromEntries(Object.entries(p.b).map(([k, v]) => [k, r2(v as number)])) as typeof p.b })).sort((a, b) => b.unpaid - a.unpaid), open: open.sort((a, b) => b.days - a.days) };
   };
-  const ar = ageBook(inp.sales), ap = ageBook(inp.purchases);
+  const ar = ageBook(inp.sales, creditByName), ap = ageBook(inp.purchases);
 
   // ── month series
   const monthly = [...M.values()].map(m => ({ ...m, gross: m.sales - m.cogs, net: m.sales - m.cogs - m.opex + m.other }));
