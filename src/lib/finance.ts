@@ -21,7 +21,7 @@ export function clampRange(inp: Pick<Input, "settings">, from: string, to: strin
   const st = inp.settings.books_start || "";
   return [st && from < st ? st : from, to];
 }
-export type Input = { sales: Doc[]; purchases: Doc[]; products: Product[]; payments: Payment[]; entries: Entry[]; accounts: Account[]; overrides: Record<number, Treatment>; fixed: Fixed[]; settings: Settings; today: string };
+export type Input = { sales: Doc[]; purchases: Doc[]; products: Product[]; payments: Payment[]; returns?: Payment[]; entries: Entry[]; accounts: Account[]; overrides: Record<number, Treatment>; fixed: Fixed[]; settings: Settings; today: string };
 
 /* ───────────────────────── helpers ───────────────────────── */
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -152,7 +152,7 @@ export function computeFinance(inp: Input, from0: string, to: string) {
 
   // customers' unapplied credit: money received (client_payments) beyond what Daftra applied to their invoices.
   // Daftra leaves such a payment off the invoice's `unpaid`, so without this the balance stays overstated.
-  const creditByName = unallocatedCredit(inp.sales, inp.payments);
+  const creditByName = unallocatedCredit(inp.sales, [...inp.payments, ...(inp.returns || [])]);   // returns not tied to an invoice count as credit, not cash
 
   // ── receivables / payables (as of today, all open documents). `credit` (by party) is netted oldest-invoice-first.
   const ageBook = (docs: Doc[], credit?: Map<string, number>) => {
@@ -353,7 +353,7 @@ export async function loadInput(today: string): Promise<Input> {
     const by = new Map<number, Line[]>(); for (const l of lines.rows as Array<Line & { doc: string }>) { const k = Number(l.doc); (by.get(k) || by.set(k, []).get(k)!).push({ product_id: l.product_id === null ? null : Number(l.product_id), item: l.item, quantity: l.quantity, net: l.net, tax: l.tax }); }
     return (head.rows as Array<Omit<Doc, "lines">>).map(d => ({ ...d, id: Number(d.id), party_id: d.party_id === null ? null : Number(d.party_id), lines: by.get(Number(d.id)) || [] }));
   };
-  const [sales, purchases, products, payments, entries, accounts, overrides, fixed, settings] = await Promise.all([
+  const [sales, purchases, products, payments, entries, accounts, overrides, fixed, settings, returns] = await Promise.all([
     docs("daftra_invoices", "daftra_invoice_items", "invoice_id", "client", "client_city", "branch"),
     docs("daftra_purchases", "daftra_purchase_items", "purchase_id", "supplier", "''", "''"),
     query("SELECT id, name, code, list_price::float8, buy_price::float8, average_cost::float8, min_price::float8, stock::float8, active FROM daftra_products"),
@@ -363,11 +363,12 @@ export async function loadInput(today: string): Promise<Input> {
     query("SELECT account_id, treatment FROM fin_account_overrides"),
     query("SELECT id, name, cat, amount::float8, type, start, \"end\", stop, date::text, note FROM app_expenses ORDER BY amount DESC"),
     query("SELECT target_gross_margin::float8, target_net_margin::float8, books_start::text FROM fin_settings WHERE id=1"),
+    query("SELECT pay_date::text date, amount::float8, client_id FROM daftra_standalone_returns").catch(() => ({ rows: [] })),
   ]);
   const app = (fixed.rows as AppExpense[]).map(e => ({ ...e, id: Number(e.id) }));
   return { sales, purchases,
     products: (products.rows as Product[]).map(p => ({ ...p, id: Number(p.id) })),
-    payments: payments.rows as Payment[],
+    payments: payments.rows as Payment[], returns: returns.rows as Payment[],
     // Daftra's expense/income entries plus the expenses kept in this app (one line per due month)
     entries: [...(entries.rows as Entry[]).map(e => ({ ...e, id: Number(e.id), account_id: e.account_id === null ? null : Number(e.account_id) })), ...toEntries(app, today)],
     accounts: [...(accounts.rows as Account[]).map(a => ({ ...a, id: Number(a.id) })), ...CATS.map(catAccount)],

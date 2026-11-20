@@ -16,6 +16,9 @@ export async function GET(req: Request) {
   const ids = [...new Set(docs.map(d => d.party_id).filter(Boolean))];
   const pays = kind === "client" && ids.length ? (await query<{ id: string; date: string; amount: number; invoice_id: string | null; method: string }>(
     "SELECT id, pay_date::text date, amount::float8, invoice_id, method FROM daftra_payments_all WHERE client_id = ANY($1::bigint[]) ORDER BY pay_date, id", [ids])).rows : [];
+  // sales returns not tied to an invoice in the books: deducted from what the customer owes (not cash)
+  if (kind === "client" && ids.length) for (const r of (await query<{ date: string; amount: number }>("SELECT pay_date::text date, amount::float8 FROM daftra_standalone_returns WHERE client_id = ANY($1::bigint[])", [ids]).catch(() => ({ rows: [] }))).rows)
+    pays.push({ id: "0", date: r.date, amount: r.amount, invoice_id: null, method: "return" });
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
   // how this customer pays (clients only — supplier payments aren't mirrored)
   const rating = kind === "client"
