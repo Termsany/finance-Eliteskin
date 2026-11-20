@@ -80,6 +80,24 @@ export function mapInvoice(inv: Json, kind: "sale" | "purchase" = "sale") {
   };
 }
 
+/**
+ * Payments recorded inside a sales invoice's detail (Daftra puts them under InvoicePayment). Exported for tests.
+ * Any array under a key containing "Payment" whose rows carry an amount is taken, so a renamed key still works.
+ */
+export function mapInvoicePayments(data: Json, invoiceId: number, clientId: number | null) {
+  const out: Array<{ id: number; invoice_id: number; client_id: number | null; pay_date: string | null; amount: number; method: string; status: string; raw: string }> = [];
+  for (const [k, v] of Object.entries(data || {})) {
+    if (!/payment/i.test(k)) continue;
+    const rows = (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v as Json) : []) as Json[];
+    for (const p of rows) {
+      if (!p || typeof p !== "object" || !num(p.id) || p.amount === undefined) continue;
+      out.push({ id: num(p.id), invoice_id: invoiceId, client_id: clientId, pay_date: isoDate(p.date) || null, amount: r2(num(p.amount)),
+        method: String(p.payment_method || ""), status: String(p.status ?? ""), raw: JSON.stringify(p) });
+    }
+  }
+  return out;
+}
+
 /** Expense/income entry → net-of-VAT amount + VAT. */
 export function mapCash(e: Json, kind: "expense" | "income") {
   const amount = num(e.amount), tax = r2(num(e.tax1_amount) + num(e.tax2_amount));
@@ -128,6 +146,12 @@ async function syncDocs(kind: "sale" | "purchase") {
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now())
         ON CONFLICT(id) DO UPDATE SET no=$2,invoice_date=$3,due_days=$4,supplier_id=$5,supplier_name=$6,payment_status=$7,net=$8,tax=$9,total=$10,paid=$11,unpaid=$12,refund=$13,modified=$14,synced_at=now()`,
         [row.id, row.no, row.invoice_date, row.due_days, row.party_id, row.party_name, row.payment_status, row.net, row.tax, row.total, row.paid, row.unpaid, row.refund, row.modified]);
+      if (kind === "sale") {
+        await c.query("DELETE FROM daftra_invoice_payments WHERE invoice_id=$1", [row.id]);
+        for (const p of mapInvoicePayments(j.data as Json, row.id, row.party_id))
+          await c.query(`INSERT INTO daftra_invoice_payments(id,invoice_id,client_id,pay_date,amount,method,status,raw) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT(id) DO UPDATE SET invoice_id=$2,client_id=$3,pay_date=$4,amount=$5,method=$6,status=$7,raw=$8`, [p.id, p.invoice_id, p.client_id, p.pay_date, p.amount, p.method, p.status, p.raw]);
+      }
       await c.query(`DELETE FROM ${T.items} WHERE ${T.fk}=$1`, [row.id]);
       for (const l of lines) await c.query(`INSERT INTO ${T.items}(${T.fk},line,product_id,item,quantity,unit_price,discount,net,tax) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [row.id, l.line, l.product_id, l.item, l.quantity, l.unit_price, l.discount, l.net, l.tax]);
       await c.query("COMMIT"); updated++;
@@ -223,6 +247,8 @@ export async function debugClient(ids: number[]) {
     invoices: await pageAll("invoices", "client_id").catch(e => ({ error: String((e as Error).message) })),
     client_payments: await pageAll("client_payments", "client_id").catch(e => ({ error: String((e as Error).message) })),
     invoice_payments_probe: await tryGet("invoice_payments.json?limit=5&page=1"),
+    invoice_details: await (async () => { const r = await query<{ id: string }>("SELECT id FROM daftra_invoices WHERE client_id = ANY($1::bigint[]) ORDER BY invoice_date DESC LIMIT 25", [ids]);
+      const out: Json[] = []; for (const x of r.rows) out.push(await tryGet(`invoices/${x.id}.json`)); return out; })(),
   };
 }
 

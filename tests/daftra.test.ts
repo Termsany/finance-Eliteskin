@@ -18,3 +18,14 @@ describe("Daftra invoice mapping", () => {
   });
   it("normalises Daftra date formats", () => { expect(isoDate("15/09/2026")).toBe("2026-09-15"); expect(isoDate("2026-09-15 10:00")).toBe("2026-09-15"); expect(isoDate("5/1/2026")).toBe("2026-01-05"); expect(isoDate("")).toBe(""); });
 });
+
+describe("mapInvoicePayments", () => {
+  it("takes the payments recorded inside an invoice's detail", async () => {
+    const { mapInvoicePayments } = await import("@/lib/daftra");
+    const rows = mapInvoicePayments({ Invoice: { id: 4 }, InvoiceItem: [{ id: 1, amount: 5 }],
+      InvoicePayment: [{ id: "29", amount: "3000.00", date: "2026-02-10", payment_method: "Bank Transfer", status: "1" }, { id: "0", amount: "1" }] }, 4, 77);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: 29, invoice_id: 4, client_id: 77, pay_date: "2026-02-10", amount: 3000, method: "Bank Transfer", status: "1" });
+    expect(mapInvoicePayments({ Invoice: { id: 4 } }, 4, 77)).toEqual([]);
+  });
+});

@@ -357,7 +357,7 @@ export async function loadInput(today: string): Promise<Input> {
     docs("daftra_invoices", "daftra_invoice_items", "invoice_id", "client", "client_city", "branch"),
     docs("daftra_purchases", "daftra_purchase_items", "purchase_id", "supplier", "''", "''"),
     query("SELECT id, name, code, list_price::float8, buy_price::float8, average_cost::float8, min_price::float8, stock::float8, active FROM daftra_products"),
-    query("SELECT pay_date::text date, amount::float8, client_id FROM daftra_client_payments WHERE status = '1'"),
+    query("SELECT pay_date::text date, amount::float8, client_id FROM daftra_payments_all"),
     query("SELECT id, kind, entry_date::text date, amount::float8, tax::float8, account_id, vendor, note FROM daftra_cash_entries"),
     query("SELECT id, code, name FROM daftra_accounts"),
     query("SELECT account_id, treatment FROM fin_account_overrides"),

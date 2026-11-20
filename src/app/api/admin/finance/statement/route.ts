@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     `SELECT id, no, invoice_date::text date, due_days, ${t.id} party_id, payment_status status, total::float8, paid::float8, unpaid::float8, refund::float8 FROM ${t.table} WHERE ${t.name}=$1 ORDER BY invoice_date, id`, [name])).rows;
   const ids = [...new Set(docs.map(d => d.party_id).filter(Boolean))];
   const pays = kind === "client" && ids.length ? (await query<{ id: string; date: string; amount: number; invoice_id: string | null; method: string }>(
-    "SELECT id, pay_date::text date, amount::float8, invoice_id, method FROM daftra_client_payments WHERE client_id = ANY($1::bigint[]) AND status = '1' ORDER BY pay_date, id", [ids])).rows : [];
+    "SELECT id, pay_date::text date, amount::float8, invoice_id, method FROM daftra_payments_all WHERE client_id = ANY($1::bigint[]) ORDER BY pay_date, id", [ids])).rows : [];
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
   // how this customer pays (clients only — supplier payments aren't mirrored)
   const rating = kind === "client"

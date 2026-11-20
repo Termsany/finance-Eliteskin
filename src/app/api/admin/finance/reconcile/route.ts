@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     "SELECT id, no, invoice_date::text date, total::float8, refund::float8, unpaid::float8, payment_status status, client_id FROM daftra_invoices WHERE client_name=$1", [name])).rows;
   const ids = [...new Set(inv.map(i => i.client_id).filter(Boolean))].map(Number);
   const pays = ids.length ? (await query<{ id: string; date: string; amount: number; invoice_id: string | null; status: string; method: string }>(
-    "SELECT id, pay_date::text date, amount::float8, invoice_id, coalesce(status,'') status, method FROM daftra_client_payments WHERE client_id = ANY($1::bigint[]) ORDER BY pay_date, id", [ids]).catch(() => ({ rows: [] }))).rows : [];
+    "SELECT id, pay_date::text date, amount::float8, invoice_id, '1' status, method FROM daftra_payments_all WHERE client_id = ANY($1::bigint[]) UNION ALL SELECT id, pay_date::text, amount::float8, invoice_id, status, method FROM daftra_client_payments WHERE client_id = ANY($1::bigint[]) AND status <> '1' ORDER BY 2, 1", [ids]).catch(() => ({ rows: [] }))).rows : [];
   const others = (await query<{ id: string; no: string; date: string | null; type: string; total: number; draft: boolean }>(
     "SELECT id, no, doc_date::text date, type, total::float8, draft FROM daftra_other_docs WHERE kind='sale' AND (party_id = ANY($1::bigint[]) OR party_name=$2) ORDER BY doc_date, id", [ids, name]).catch(() => ({ rows: [] }))).rows;
   const sync = await getSetting("sync_diag");
