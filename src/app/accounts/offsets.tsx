@@ -20,10 +20,8 @@ export function Offsets({ open }: { open: (kind: "supplier", name: string) => vo
   const [d, setD] = useState<Data | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"orders" | "prices">("orders");
-  const [sup, setSup] = useState<string>("");              // supplier filter
-  const [stat, setStat] = useState<OffsetStatus | "open" | "all">("open");
   const [form, setForm] = useState<OffsetOrder | "new" | null>(null);
-  const [openRow, setOpenRow] = useState<number | null>(null);
+  const [drill, setDrill] = useState<{ supplier: string; client: string | null } | null>(null);   // supplier → customer → invoices
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -32,14 +30,6 @@ export function Offsets({ open }: { open: (kind: "supplier", name: string) => vo
     if (j?.totals) setD(j); else toast(j?.error || "تعذر تحميل المقاصة", "error");
   }, [toast]);
   useEffect(() => { void load(); }, [load]);
-
-  const rows = useMemo(() => {
-    let l = d?.rows || [];
-    if (sup) l = l.filter(r => r.supplier === sup);
-    if (stat === "open") l = l.filter(r => r.open > 0);
-    else if (stat !== "all") l = l.filter(r => r.status === stat);
-    return [...l].sort((a, b) => b.late ? 1 : a.late ? -1 : b.open - a.open || b.order_date.localeCompare(a.order_date));
-  }, [d, sup, stat]);
 
   async function move(id: number, body: Record<string, unknown>, ok: string) {
     const r = await fetch("/api/admin/finance/offsets/orders", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, ...body }) });
@@ -79,36 +69,81 @@ export function Offsets({ open }: { open: (kind: "supplier", name: string) => vo
         {d.totals.late > 0 && <div className="rounded-2xl bg-amber-50 px-4 py-3 text-[13px] font-bold text-amber-900 ring-1 ring-amber-200">
           ⏰ {d.totals.late} أوردر عدّى عليه أكتر من 30 يوم من غير مقاصة بإجمالي {sar(d.totals.late_amount)} — طالب الموردين بيها.</div>}
 
-        {/* per-supplier chips */}
-        {d.suppliers.length > 0 && <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setSup("")} className={chip(!sup)}>الكل ({d.suppliers.length})</button>
-          {d.suppliers.map(s => <button key={s.supplier} type="button" onClick={() => setSup(s.supplier === sup ? "" : s.supplier)} className={chip(sup === s.supplier)}>
-            {s.supplier} · <b>{k(s.open)}</b>{s.late > 0 && <span className="text-red-600"> ⏰{s.late}</span>}</button>)}
-        </div>}
-
-        <div className="overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--card)]">
-          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3 sm:px-5">
-            <b className="text-[15px]">{sup || "كل الموردين"}</b>
-            <span className="mr-auto flex gap-1 rounded-xl bg-[var(--sky-light)] p-1">
-              {([["open", "المفتوح"], ["printed", "اتطبع"], ["collected", "حصّل"], ["settled", "اتعمل مقاصة"], ["all", "الكل"]] as const).map(([v, l]) =>
-                <button key={v} type="button" onClick={() => setStat(v)} className={seg(stat === v)}>{l}</button>)}
-            </span>
-          </div>
-          {!rows.length ? <div className="p-8 text-center text-sm text-[var(--muted)]">مفيش أوردرات هنا</div>
-            : <div className="divide-y divide-[var(--border)]">{rows.map(r => <OrderRow key={r.id} r={r} today={d.today}
-              on={openRow === r.id} toggle={() => setOpenRow(openRow === r.id ? null : r.id)}
-              move={move} del={del} edit={() => setForm(r as unknown as OffsetOrder)} openSup={() => open("supplier", r.supplier)}
-              msg={() => { navigator.clipboard?.writeText(offsetMessage(r.supplier, d.rows)).then(() => toast("اتنسخت رسالة واتساب", "success")).catch(() => toast("تعذر النسخ", "error")); }} />)}</div>}
-        </div>
+        {/* a card per supplier with its full amount — tap it to see the amount per customer */}
+        {!d.suppliers.length ? <div className="rounded-[22px] border border-[var(--border)] bg-[var(--card)] p-8 text-center text-sm text-[var(--muted)]">مفيش مبالغ مفتوحة على الموردين دلوقتي. اضغط «أوردر جديد» عشان تسجّل.</div>
+          : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{d.suppliers.map(s => <button key={s.supplier} type="button" onClick={() => setDrill({ supplier: s.supplier, client: null })}
+            className="rounded-[22px] border border-[var(--border)] bg-[var(--card)] p-4 text-right transition hover:-translate-y-0.5 hover:border-[var(--sky-border)] hover:shadow-lg">
+            <div className="flex items-start justify-between gap-2"><b className="min-w-0 truncate text-[15px] text-[var(--ink)]">{s.supplier}</b>
+              {s.late > 0 && <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold text-amber-800">⏰ {s.late} متأخر</span>}</div>
+            <div className="mt-1.5 text-[24px] font-extrabold tabular-nums text-[var(--navy)]">{sar(s.open)}</div>
+            <div className="mt-0.5 text-[11.5px] text-[var(--muted)]">مطلوب مقاصته · {s.orders} أوردر{s.collected > 0 ? ` · ${sar(s.collected)} حصّلها وينتظر` : ""}</div>
+            <div className="mt-2 text-[11.5px] font-bold text-[var(--navy)]">المبلغ على كل عميل ‹</div>
+          </button>)}</div>}
         <div className="text-[11px] text-[var(--muted)]">المقاصة بتتسجل في دفترة، فرصيد المورد في «الموردين» بيكون اتخصم منه الفرق لوحده. البرنامج هنا بيتابع الأوردرات لحد ما المقاصة تتم بس.</div>
       </>}
 
     {form && <OrderForm order={form} d={d} onClose={() => setForm(null)} reload={load} toast={toast} />}
+    {drill && <Drill d={d} supplier={drill.supplier} client={drill.client}
+      onPick={c => setDrill({ supplier: drill.supplier, client: c })}
+      onBack={() => drill.client ? setDrill({ supplier: drill.supplier, client: null }) : setDrill(null)}
+      onClose={() => setDrill(null)} move={move} del={del} edit={o => setForm(o)} openSup={() => open("supplier", drill.supplier)} toast={toast} />}
+  </div>;
+}
+
+/* ───────── supplier → customer → invoices drill-down ───────── */
+function Drill({ d, supplier, client, onPick, onBack, onClose, move, del, edit, openSup, toast }: {
+  d: Data; supplier: string; client: string | null; onPick: (c: string) => void; onBack: () => void; onClose: () => void;
+  move: (id: number, body: Record<string, unknown>, ok: string) => Promise<boolean>; del: (id: number) => void; edit: (o: OffsetOrder) => void; openSup: () => void; toast: (m: string, t?: "success" | "error") => void }) {
+  const [openRow, setOpenRow] = useState<number | null>(null);
+  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") onBack(); }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, [onBack]);
+  const supRows = d.rows.filter(r => r.supplier === supplier);
+  // level 1: the amount per customer
+  const clients = useMemo(() => {
+    const by = new Map<string, { client: string; open: number; amount: number; orders: number; late: number }>();
+    for (const r of supRows) { const g = by.get(r.client) || { client: r.client, open: 0, amount: 0, orders: 0, late: 0 };
+      g.open += r.open; g.amount += r.amount; g.orders++; if (r.late) g.late++; by.set(r.client, g); }
+    return [...by.values()].sort((a, b) => b.open - a.open || b.amount - a.amount);
+  }, [supRows]);
+  const orders = client ? supRows.filter(r => r.client === client).sort((a, b) => b.open - a.open || b.order_date.localeCompare(a.order_date)) : [];
+  const title = client ? `${supplier} ← ${client}` : supplier;
+  const openTotal = client ? orders.reduce((s, r) => s + r.open, 0) : clients.reduce((s, c) => s + c.open, 0);
+
+  return <div dir="rtl" className="fixed inset-0 z-[90] flex items-end justify-center bg-[#0b1d20]/40 p-0 sm:items-center sm:p-4" onClick={onClose}>
+    <div onClick={e => e.stopPropagation()} className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-[var(--card)] sm:rounded-3xl">
+      <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3">
+        <button type="button" onClick={onBack} aria-label="رجوع" className="flex items-center gap-1 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-bold text-[var(--navy)] hover:bg-[var(--sky-light)]"><span className="text-[14px]">›</span>رجوع</button>
+        <div className="min-w-0"><div className="truncate text-[15px] font-extrabold text-[var(--ink)]">{title}</div>
+          <div className="text-[11.5px] text-[var(--muted)]">{client ? `${orders.length} فاتورة` : `${clients.length} عميل`} · مطلوب مقاصته {sar(openTotal)}</div></div>
+        <button type="button" onClick={onClose} aria-label="إغلاق" className="mr-auto grid h-8 w-8 place-items-center rounded-full text-lg hover:bg-[var(--sky-light)]">✕</button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+        {!client ? <>
+          {/* the amount per customer — tap a customer to see its invoices */}
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-[12px] text-[var(--muted)]">المبلغ على كل عميل — اضغط العميل تشوف فواتيره</span>
+            <button type="button" onClick={() => { navigator.clipboard?.writeText(offsetMessage(supplier, d.rows)).then(() => toast("اتنسخت رسالة واتساب", "success")).catch(() => toast("تعذر النسخ", "error")); }} className="rounded-full border border-[var(--border)] px-3 py-1.5 text-[11px] font-bold text-[var(--navy)]">رسالة واتساب للمورد</button>
+          </div>
+          <div className="space-y-2">{clients.map(c => <button key={c.client} type="button" onClick={() => onPick(c.client)}
+            className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-right transition hover:bg-[var(--sky-light)]">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${c.late > 0 ? "bg-amber-500" : c.open > 0 ? "bg-[var(--sky)]" : "bg-emerald-500"}`} />
+            <span className="min-w-0 flex-1"><b className="block truncate text-[14px] text-[var(--ink)]">{c.client}</b>
+              <span className="text-[11.5px] text-[var(--muted)]">{c.orders} أوردر{c.late > 0 ? ` · ⏰ ${c.late} متأخر` : ""}</span></span>
+            <b className="shrink-0 tabular-nums text-[16px] text-[var(--navy)]">{c.open ? sar(c.open) : <span className="text-emerald-700 text-[13px]">اتعملت مقاصة</span>}</b>
+            <span className="shrink-0 text-[var(--muted)]">‹</span>
+          </button>)}</div>
+        </> : <>
+          {/* the invoices for this supplier + customer */}
+          <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)]">{orders.map(r => <OrderRow key={r.id} r={r} today={d.today}
+            on={openRow === r.id} toggle={() => setOpenRow(openRow === r.id ? null : r.id)}
+            move={move} del={del} edit={() => edit(r as unknown as OffsetOrder)} openSup={openSup}
+            msg={() => { navigator.clipboard?.writeText(offsetMessage(supplier, d.rows)).then(() => toast("اتنسخت رسالة واتساب", "success")).catch(() => toast("تعذر النسخ", "error")); }} />)}</div>
+        </>}
+      </div>
+    </div>
   </div>;
 }
 
 const seg = (on: boolean) => `rounded-lg px-3 py-1.5 text-xs font-bold transition ${on ? "bg-[var(--card)] text-[var(--navy)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--navy)]"}`;
-const chip = (on: boolean) => `rounded-full border px-3 py-1.5 text-xs font-bold transition ${on ? "border-[var(--navy)] bg-[var(--sky-light)] text-[var(--navy)]" : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--sky-border)]"}`;
 
 function OrderRow({ r, today, on, toggle, move, del, edit, openSup, msg }: {
   r: OffsetRow; today: string; on: boolean; toggle: () => void;
