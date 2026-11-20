@@ -167,7 +167,7 @@ export function computeFinance(inp: Input, from0: string, to: string) {
       (byParty.get(d.party) || byParty.set(d.party, []).get(d.party)!).push({ d, due, days });
     }
     for (const [name, list] of byParty) {
-      list.sort((a, b) => a.due.localeCompare(b.due) || b.d.date.localeCompare(a.d.date));   // oldest first
+      list.sort((a, b) => a.d.date.localeCompare(b.d.date) || a.due.localeCompare(b.due));   // oldest invoice date first
       let c = credit?.get(name) || 0;
       for (const { d, due, days } of list) {
         let u = d.unpaid;
