@@ -57,7 +57,7 @@ export async function ensureBudget(repId: number, month: string): Promise<RepBud
   }
 
   const sampleBudget = r3(prevUnits * sPct / 100);
-  const promoBudget = r2(prevUnits * unitCost * pPct / 100);
+  const promoBudget = r2(prevSales * pPct / 100);
 
   const ins = await query<RepBudget>(`INSERT INTO rep_budgets(rep_id, month, prev_units, sample_budget, promo_budget, sample_pct, promo_pct, unit_cost, prev_sales)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
