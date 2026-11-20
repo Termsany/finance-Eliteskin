@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
 
-type Item = { href: string; label: string; icon: string };
+type Item = { href: string; label: string; icon: string; section?: string };
 type Ind = { top: number; h: number; on: boolean; anim: boolean };
 
 /** Desktop sidebar navigation: duotone icons, a sliding active pill, hover micro-animations and tooltips when collapsed. */
@@ -40,10 +40,23 @@ export default function SidebarNav({ primary, more, active }: { primary: Item[];
     </Link>;
   };
 
+  const grouped = () => {
+    const out: React.ReactNode[] = [];
+    let lastSection: string | undefined;
+    for (const n of primary) {
+      if (n.section && n.section !== lastSection) {
+        if (lastSection) out.push(<div key={`sep-${n.section}`} className="my-1 h-px bg-white/10" />);
+        out.push(<div key={`hdr-${n.section}`} className="es-hide px-3 pb-0.5 pt-1.5 text-[10px] font-semibold tracking-wide text-white/35">{n.section}</div>);
+        lastSection = n.section;
+      }
+      out.push(link(n));
+    }
+    return out;
+  };
+
   return <nav ref={nav} className="es-nav relative mt-1 flex flex-col gap-1">
     <span aria-hidden="true" className={`es-ind ${ind.anim ? "es-ind-anim" : ""}`} style={{ transform: `translateY(${ind.top}px)`, height: ind.h, opacity: ind.on ? 1 : 0 }} />
-    <div className="es-hide px-3 pb-1 text-[11px] font-semibold text-white/40">القائمة</div>
-    {primary.map(link)}
+    {grouped()}
     {more.length > 0 && <>
       <div className="my-1.5 h-px bg-white/10" />
       <button type="button" onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen} data-tip="المزيد" className="es-link">

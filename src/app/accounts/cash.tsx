@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useToast } from "@/components/Toast";
 import type { CashForecastResult, VatFiling } from "@/lib/fin-cash";
@@ -146,7 +146,25 @@ export function CashTab({ go }: { go: (t: Tab) => void }) {
   }
 
   if (!d) return <div className="h-40 animate-pulse rounded-2xl bg-white" />;
-  const f = d.forecast, a = f.assumptions, neg = f.first_negative_week;
+  const sc = SCENARIOS[scenario];
+  const f = useMemo(() => {
+    const base = d.forecast;
+    if (scenario === "base") return base;
+    let bal = base.opening;
+    const rows = base.rows.map(r => {
+      const in_ar = Math.round(r.in_ar * sc.collectMult);
+      const in_new = Math.round(r.in_new * sc.salesMult);
+      const out_fixed = Math.round(r.out_fixed * sc.expenseMult);
+      const out_var = Math.round(r.out_var * sc.expenseMult);
+      const net = in_ar + in_new - r.out_ap - out_fixed - out_var - r.out_vat - r.out_cogs_new;
+      bal += net;
+      return { ...r, in_ar, in_new, out_fixed, out_var, net, balance: Math.round(bal) };
+    });
+    const lowest = rows.reduce((best, r, i) => r.balance < best.balance ? { balance: r.balance, week: i } : best, { balance: Infinity, week: -1 });
+    const first_negative_week = rows.findIndex(r => r.balance < 0);
+    return { ...base, rows, lowest, first_negative_week: first_negative_week >= 0 ? first_negative_week : null, closing: rows.length ? rows[rows.length - 1].balance : base.closing };
+  }, [d.forecast, scenario, sc]);
+  const a = f.assumptions, neg = f.first_negative_week;
   const stale = d.cash_as_of && (Date.parse(d.today) - Date.parse(d.cash_as_of)) / 864e5 > 7;
 
   // Decision banner
