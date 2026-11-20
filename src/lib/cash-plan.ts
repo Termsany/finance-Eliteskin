@@ -29,6 +29,9 @@ export type PlanInputs = {
   vat_due: number;
   base: { sales: number; cogs_ratio: number; opex: number; months: number };
   lag_in: number; lag_out: number; dso: number;
+  // the products the plan's new sales are assumed to be, and the blended cost ratio from them
+  plan_cogs_ratio: number;
+  products: Array<{ key: string; name: string; cost: number; price: number; cost_ratio: number; qty_sold: number }>;
 };
 export type PlanOpts = {
   sales: number;        // planned net monthly sales (before VAT) from next month
@@ -39,6 +42,8 @@ export type PlanOpts = {
   buffer: number;       // the floor the balance must stay above
   rate: number;         // annual financing rate %
   grace: number;        // months before the first instalment
+  cogsRatio: number;    // cost of goods as a share of the new sales (drives supplier payments for new business)
+  financing: { F: number; n: number } | null;   // a financing amount the owner typed; null = use the smallest computed
 };
 
 const VAT = 0.15;
@@ -67,7 +72,7 @@ export function simulate(p: PlanInputs, o: PlanOpts, S: number, H: number) {
   }
   for (let t = 0; t < H; t++) opex[t] = p.base.opex * (1 - o.cut / 100) * (t === 0 ? frac : 1);
   if (p.vat_due > 0 && H > 1) vat[1] += p.vat_due;
-  const inPer = 1 + VAT, purPer = (1 + VAT) * p.base.cogs_ratio, vatPer = VAT * (1 - p.base.cogs_ratio);
+  const cr = o.cogsRatio, inPer = 1 + VAT, purPer = (1 + VAT) * cr, vatPer = VAT * (1 - cr);
   for (let k = 1; k < H; k++) {
     if (k + o.lagIn < H) nin[k + o.lagIn] += S * inPer;
     if (k + p.lag_out < H) nout[k + p.lag_out] += S * purPer;
@@ -79,7 +84,7 @@ export function simulate(p: PlanInputs, o: PlanOpts, S: number, H: number) {
 }
 
 /** Cash a riyal of monthly sales leaves each month once things settle (after restocking and VAT) = the gross margin. */
-export const unitNet = (p: PlanInputs) => (1 + VAT) - (1 + VAT) * p.base.cogs_ratio - VAT * (1 - p.base.cogs_ratio);
+export const unitNet = (p: PlanInputs, cr: number) => (1 + VAT) - (1 + VAT) * cr - VAT * (1 - cr);
 /** Fixed instalment per riyal financed. */
 export const annuity = (ratePct: number, n: number) => { const i = ratePct / 100 / 12; return i > 0 ? i / (1 - Math.pow(1 + i, -n)) : 1 / n; };
 
@@ -136,6 +141,19 @@ export function planRows(p: PlanInputs, o: PlanOpts, S: number, fin: { F: number
 
 export const TERMS = [6, 12, 18, 24];
 
+/** The plan for a financing amount the owner typed (F over n months), placed where the balance first drops. */
+export function manualFinance(p: PlanInputs, o: PlanOpts, S: number, F: number, n: number) {
+  const cur = p.today.slice(0, 7);
+  let f0 = simulate(p, o, S, 12).bal.findIndex(b => b < o.buffer); if (f0 < 0) f0 = 0;
+  const H = Math.min(48, Math.max(12, f0 + o.grace + n + 1));
+  const a = annuity(o.rate, n), installment = F * a;
+  const rows = planRows(p, o, S, F > 0 ? { F, n, f0 } : null, H);
+  const min = Math.min(...rows.map(r => r.balance));
+  return { F: r0(F), n, f0, H, installment: r0(installment), total: r0(installment * n), cost: r0(installment * n - F),
+    start: addMonths(cur, f0), first_payment: addMonths(cur, f0 + o.grace + 1), last_payment: addMonths(cur, f0 + o.grace + n),
+    min_balance: r0(min), ok: min >= o.buffer - 1 };
+}
+
 /** Everything the plan screen shows for one set of choices. */
 export function cashPlan(p: PlanInputs, o: PlanOpts) {
   const cur = p.today.slice(0, 7);
@@ -149,7 +167,7 @@ export function cashPlan(p: PlanInputs, o: PlanOpts) {
     if (s > 1e-9) need = Math.max(need, (o.buffer - b0[t]) / s);
     else if (b0[t] < o.buffer - 1e-6) blocked.push(addMonths(cur, t));
   }
-  const un = unitNet(p), opex = p.base.opex * (1 - o.cut / 100);
+  const un = unitNet(p, o.cogsRatio), opex = p.base.opex * (1 - o.cut / 100);
   const sustain = un > 0 ? opex / un : null;   // sales that cover expenses month after month (break-even)
   const noFinance = { possible: !blocked.length, blocked, sales: blocked.length ? null : Math.ceil(Math.max(need, sustain || 0) / 1000) * 1000 };
   const carry = (inst: number) => un > 0 ? Math.ceil((opex + inst) / un / 1000) * 1000 : null;   // sales that carry expenses + instalment

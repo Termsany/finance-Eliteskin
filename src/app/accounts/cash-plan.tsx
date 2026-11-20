@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useToast } from "@/components/Toast";
-import { cashPlan, planRows, type PlanInputs, type PlanOpts } from "@/lib/cash-plan";
+import { cashPlan, planRows, manualFinance, type PlanInputs, type PlanOpts } from "@/lib/cash-plan";
 import { monthLabel } from "@/lib/collections";
 import { sar, short, Card, Hint } from "./kit";
 
@@ -16,29 +16,39 @@ export function CashPlan() {
   const [o, setO] = useState<PlanOpts | null>(null);
   const [term, setTerm] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [picks, setPicks] = useState<Set<string>>(new Set());   // which plan products are included in the cost ratio
   useEffect(() => {
     fetch("/api/admin/finance/plan", { cache: "no-store" }).then(r => r.json()).then(j => {
       if (!j?.inputs) return; const p: PlanInputs = j.inputs;
-      setInp(p); setApproved(j.approved);
-      setO({ sales: Math.round(p.base.sales / 1000) * 1000, collect: 0.9, cut: 0, deferAp: 0, lagIn: p.lag_in, buffer: 0, rate: 10, grace: 0 });
+      setInp(p); setApproved(j.approved); setPicks(new Set(p.products.map(x => x.key)));
+      setO({ sales: Math.round(p.base.sales / 1000) * 1000, collect: 0.9, cut: 0, deferAp: 0, lagIn: p.lag_in, buffer: 0, rate: 10, grace: 0, cogsRatio: p.plan_cogs_ratio, financing: null });
     }).catch(() => {});
   }, []);
   const plan = useMemo(() => inp && o ? cashPlan(inp, o) : null, [inp, o]);
   const sel = plan ? plan.terms.find(t => t.n === (term ?? plan.suggestion?.n ?? plan.recommended)) || null : null;
-  const useFin = sel && sel.needed && sel.feasible ? sel : null;
+  const autoFin = sel && sel.needed && sel.feasible ? sel : null;
+  const manual = useMemo(() => inp && o && o.financing ? manualFinance(inp, o, o.sales, o.financing.F, o.financing.n) : null, [inp, o]);
+  const useFin = manual ?? autoFin;
   const rows = useMemo(() => inp && o ? planRows(inp, o, o.sales, useFin ? { F: useFin.F, n: useFin.n, f0: useFin.f0 } : null, useFin ? useFin.H : 12) : null, [inp, o, useFin]);
   if (!inp || !o || !plan) return <div className="h-40 animate-pulse rounded-2xl bg-[var(--card)]" />;
   const set = (k: keyof PlanOpts, v: number) => setO({ ...o, [k]: v });
-  const apply = (sales: number, n: number) => { setO({ ...o, sales }); setTerm(n); };
+  const apply = (sales: number, n: number) => { setO({ ...o, sales, financing: null }); setTerm(n); };
+  const ratioFrom = (keys: Set<string>) => {
+    const sel2 = inp.products.filter(x => keys.has(x.key)); if (!sel2.length) return o.cogsRatio;
+    const w = sel2.reduce((a, x) => a + x.qty_sold * x.price, 0);
+    return Math.round((w > 0 ? sel2.reduce((a, x) => a + x.cost_ratio * x.qty_sold * x.price, 0) / w : sel2.reduce((a, x) => a + x.cost_ratio, 0) / sel2.length) * 1000) / 1000;
+  };
+  const togglePick = (key: string) => { const n = new Set(picks); if (n.has(key)) n.delete(key); else n.add(key); setPicks(n); setO({ ...o, cogsRatio: ratioFrom(n) }); };
+  const cogsOfGoods = Math.round(o.sales * o.cogsRatio);
   const sg = plan.suggestion;
-  const q = new URLSearchParams({ sales: String(o.sales), collect: String(Math.round(o.collect * 100)), cut: String(o.cut), defer: String(o.deferAp), lag: String(o.lagIn), buffer: String(o.buffer), rate: String(o.rate), grace: String(o.grace), term: String(sel?.n || "") });
+  const q = new URLSearchParams({ sales: String(o.sales), collect: String(Math.round(o.collect * 100)), cut: String(o.cut), defer: String(o.deferAp), lag: String(o.lagIn), buffer: String(o.buffer), rate: String(o.rate), grace: String(o.grace), cogs: String(Math.round(o.cogsRatio * 100)), term: String(sel?.n || ""), ...(o.financing ? { fin: String(o.financing.F), finN: String(o.financing.n) } : {}) });
   const monthOpex = Math.round(inp.base.opex);
 
   async function approve() {
     if (!o) return;
     setBusy(true);
     const s = useFin;
-    const target = Math.max(o.sales, s?.carry_sales || plan?.no_finance.sales || 0);
+    const target = o.financing ? o.sales : Math.max(o.sales, (autoFin?.carry_sales) || plan?.no_finance.sales || 0);
     const r = await fetch("/api/admin/finance/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
       target_sales: target, financing: s?.F || 0, term: s?.n || 0, installment: s?.installment || 0, rate: o.rate, grace: o.grace, start: s?.start, collect: o.collect }) });
     const j = await r.json().catch(() => null); setBusy(false);
@@ -86,6 +96,40 @@ export function CashPlan() {
       {ctl("احتياطي أمان", <select value={o.buffer} onChange={e => set("buffer", Number(e.target.value))} className={inputCls}><option value={0}>من غير احتياطي (أقل تمويل)</option><option value={monthOpex}>مصاريف شهر ({short(monthOpex)})</option></select>, "أقل تمويل = الرصيد ما ينزلش تحت الصفر. الاحتياطي يخلّي فيه هامش أمان.")}
     </div>
 
+    {/* cost of goods for the new sales — from the plan products */}
+    <div className="mt-3 rounded-2xl border border-[var(--border)] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <b className="text-[14px]">تكلفة شراء البضاعة للمبيعات الجديدة</b>
+        <span className="text-[12px] text-[var(--muted)]">من كل {sar(o.sales)} مبيعات، تكلفة الشراء <b className="text-[var(--ink)]">{sar(cogsOfGoods)}</b> ({Math.round(o.cogsRatio * 100)}%) — دي بتبقى مدفوعات موردين بعد {inp.lag_out} شهر</span>
+      </div>
+      {inp.products.length > 0 ? <>
+        <p className="mt-1 text-[12px] text-[var(--muted)]">الحساب على أصنافك: اختار اللي شغّال عليها والنسبة تتحسب من تكلفتها وسعر بيعها.</p>
+        <div className="mt-2 flex flex-wrap gap-2">{inp.products.map(x => { const on = picks.has(x.key);
+          return <button key={x.key} type="button" onClick={() => togglePick(x.key)} className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${on ? "border-[var(--navy)] bg-[var(--sky-light)] text-[var(--navy)]" : "border-[var(--border)] text-[var(--muted)]"}`}>
+            {on ? "✓ " : ""}{x.name} <span className="font-normal">· تكلفة {Math.round(x.cost_ratio * 100)}%</span></button>; })}</div>
+      </> : <p className="mt-1 text-[12px] text-amber-800">ما لقيتش أصناف الخطة (Arche · Spectra · Dermomine · gro) في بيانات دفترة — بستخدم متوسط تكلفتك العامة {Math.round(inp.base.cogs_ratio * 100)}%. تقدر تكتب النسبة بإيدك.</p>}
+      <label className="mt-3 flex flex-wrap items-center gap-2 text-[12px]"><span className="font-bold text-[var(--muted)]">أو اكتب نسبة التكلفة %</span>
+        <input value={Math.round(o.cogsRatio * 100)} onChange={e => set("cogsRatio", Math.min(98, Math.max(0, Number(e.target.value) || 0)) / 100)} inputMode="decimal" dir="ltr" className="w-24 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-sm font-bold" /></label>
+    </div>
+
+    {/* manual financing — type your own amount and term */}
+    <div className="mt-3 rounded-2xl border border-[var(--border)] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <b className="text-[14px]">تمويل بمبلغ تكتبه بنفسك</b>
+        {o.financing && <button type="button" onClick={() => setO({ ...o, financing: null })} className="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-bold text-[var(--navy)]">رجّع لأقل تمويل تلقائي</button>}
+      </div>
+      <div className="mt-2 flex flex-wrap items-end gap-3">
+        <label className="block"><span className="text-[11.5px] font-bold text-[var(--muted)]">المبلغ</span>
+          <input value={o.financing?.F ?? ""} placeholder="اكتب مبلغ التمويل" onChange={e => { const F = Math.max(0, Number(e.target.value.replace(/,/g, "")) || 0); setO({ ...o, financing: F > 0 ? { F, n: o.financing?.n ?? 12 } : null }); }} inputMode="decimal" dir="ltr" className={inputCls} /></label>
+        <label className="block"><span className="text-[11.5px] font-bold text-[var(--muted)]">مدة السداد</span>
+          <select value={o.financing?.n ?? 12} onChange={e => o.financing && setO({ ...o, financing: { F: o.financing.F, n: Number(e.target.value) } })} disabled={!o.financing} className={inputCls}>{[6, 9, 12, 18, 24, 30, 36].map(v => <option key={v} value={v}>{v} شهر</option>)}</select></label>
+      </div>
+      {manual && <div className="mt-2 text-[12.5px] leading-6">
+        <span className={manual.ok ? "font-bold text-emerald-700" : "font-bold text-red-700"}>{manual.ok ? "✓ المبلغ ده بيكفّي" : "✗ المبلغ ده مش كفاية"}</span>
+        {" "}— قسط <b>{sar(manual.installment)}</b> × {manual.n} شهر · تكلفة التمويل {sar(manual.cost)} · أقل رصيد متوقع <b className={manual.min_balance < o.buffer ? "text-red-700" : "text-[var(--navy)]"}>{sar(manual.min_balance)}</b>{!manual.ok && autoFin ? ` · أقل مبلغ يكفّي ${sar(autoFin.F)}` : ""}.
+      </div>}
+    </div>
+
     {/* without financing */}
     <div className="mt-4 rounded-2xl border border-[var(--border)] p-4">
       <div className="text-[14px] font-extrabold">١) من غير تمويل خالص</div>
@@ -123,7 +167,7 @@ export function CashPlan() {
     {/* month by month */}
     {rows && <div className="mt-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <b className="text-[14px]">الخطة شهر بشهر — {useFin ? `مبيعات ${sar(o.sales)} + تمويل ${sar(useFin.F)} على ${useFin.n} شهر` : `مبيعات ${sar(o.sales)} من غير تمويل`}</b>
+        <b className="text-[14px]">الخطة شهر بشهر — {useFin ? `مبيعات ${sar(o.sales)} + تمويل ${sar(useFin.F)} على ${useFin.n} شهر${o.financing ? " (بمبلغك)" : ""}` : `مبيعات ${sar(o.sales)} من غير تمويل`}</b>
         <span className="flex gap-2">
           <a href={`/report/plan?${q}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-3.5 py-2 text-xs font-bold text-[var(--navy)]"><Icon name="file" size={14} />تقرير PDF</a>
           <button type="button" disabled={busy} onClick={() => void approve()} className="rounded-full bg-[var(--navy)] px-3.5 py-2 text-xs font-bold text-white disabled:opacity-60">{busy ? "بحفظ…" : "اعتمد الخطة"}</button>
