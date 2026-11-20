@@ -44,17 +44,21 @@ describe("audit", () => {
   });
 });
 
-describe("cash forecast", () => {
+describe("cash forecast v2", () => {
   const fin = { ar: { open: [{ id: 1, no: "A", date: "2026-10-01", party: "عميل", unpaid: 10_000, due: "2026-11-10", days: 0 }, { id: 2, no: "B", date: "2026-07-01", party: "عميل", unpaid: 8000, due: "2026-08-01", days: 95 }] },
-    ap: { open: [{ id: 3, no: "P", date: "2026-10-01", party: "مورد", unpaid: 4000, due: "2026-11-03", days: 0 }] }, baseline: { opex: 30_000, sales_gross: 0 } } as unknown as Parameters<typeof cashForecast>[0];
+    ap: { open: [{ id: 3, no: "P", date: "2026-10-01", party: "مورد", unpaid: 4000, due: "2026-11-03", days: 0 }] },
+    baseline: { opex: 30_000, sales_gross: 0, sales: 0, cogs: 0 },
+    kpi: { vat_payable: 0 },
+  } as unknown as Parameters<typeof cashForecast>[0];
   const f = cashForecast(fin, { today: "2026-11-01", fixed: [{ id: "x", name: "رواتب", category: "salaries", monthly_amount: 20_000, start_month: "2026-01", end_month: null, notes: "" }] }, 5000, { includeNew: false });
-  it("uses collection odds and puts fixed costs on the 27th", () => {
-    expect(collectChance(0)).toBe(0.95); expect(collectChance(95)).toBe(0.2);
+  it("uses single collection rate (90%) and puts fixed costs on the 27th", () => {
+    expect(collectChance(0)).toBe(0.95); expect(collectChance(95)).toBe(0.2); // legacy fn still works
     expect(f.rows[0].from).toBe("2026-11-01"); // Sunday-start weeks
-    expect(f.rows[1].in_ar).toBe(Math.round(9500 + 400));
+    // 10000 * 90% = 9000 on due week; 8000 * 90% = 7200 spread over 4 weeks (no avg_days) = 1800/wk
+    expect(f.rows[1].in_ar).toBe(Math.round(9000 + 1800));
     expect(f.rows.reduce((s, r) => s + r.out_fixed, 0)).toBe(60_000); // Nov, Dec, Jan
     expect(f.assumptions.variable_monthly).toBe(10_000);
-    expect(Math.abs(f.total_out - (4000 + 60_000 + 10_000 / 4.33 * 13))).toBeLessThan(10); // weekly rounding
+    expect(f.assumptions.collect_pct).toBe(90);
     expect(f.first_negative_week).not.toBeNull();
   });
 });
