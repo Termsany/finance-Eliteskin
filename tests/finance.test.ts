@@ -91,3 +91,43 @@ describe("Daftra cash entries", () => {
     expect(mapCash({ id: "2", amount: "41", date: "01/04/2025" }, "expense")).toMatchObject({ amount: 41, tax: 0, account_id: null, entry_date: "2025-04-01" });
   });
 });
+
+import { unallocatedCredit } from "@/lib/finance";
+describe("customer unapplied credit", () => {
+  const sales = [
+    { id: 1, no: "A", date: "2026-01-01", due_days: 30, party_id: 7, party: "عميل", city: "", branch: "", payment_status: 0, net: 1000, tax: 150, total: 1150, paid: 0, unpaid: 1150, refund: 0, lines: [] },
+    { id: 2, no: "B", date: "2026-02-01", due_days: 30, party_id: 7, party: "عميل", city: "", branch: "", payment_status: 1, net: 1000, tax: 150, total: 1150, paid: 1150, unpaid: 0, refund: 0, lines: [] },
+  ];
+  it("counts payments beyond what Daftra applied to invoices", () => {
+    // Daftra applied 1150 (invoice B). The customer actually paid 2300, so 1150 is unapplied credit.
+    const c = unallocatedCredit(sales as never, [{ amount: 1150, client_id: 7 }, { amount: 1150, client_id: 7 }]);
+    expect(c.get("عميل")).toBe(1150);
+  });
+  it("no credit when payments match the applied amount", () => {
+    const c = unallocatedCredit(sales as never, [{ amount: 1150, client_id: 7 }]);
+    expect(c.size).toBe(0);
+  });
+  it("ignores payments with no customer id", () => {
+    const c = unallocatedCredit(sales as never, [{ amount: 5000, client_id: null }]);
+    expect(c.size).toBe(0);
+  });
+});
+
+describe("receivables net unapplied customer credit", () => {
+  const inp = base({
+    sales: [
+      doc({ id: 1, no: "A", date: "2026-09-01", due_days: 30, party_id: 7, party: "عميل", payment_status: 0, net: 1000, tax: 0, total: 1000, unpaid: 1000 }),
+      doc({ id: 2, no: "B", date: "2026-09-02", due_days: 30, party_id: 7, party: "عميل", payment_status: 0, net: 1000, tax: 0, total: 1000, unpaid: 1000 }),
+    ],
+  });
+  it("a recorded-but-unapplied payment drops the balance and clears the oldest invoice", () => {
+    const f = computeFinance({ ...inp, payments: [{ date: "2026-10-01", amount: 1000, client_id: 7 }] }, "2026-09-01", "2026-09-30");
+    expect(f.ar.total).toBe(1000);                       // 2000 invoiced − 1000 paid
+    expect(f.ar.open.length).toBe(1);                    // oldest invoice fully covered
+    expect(f.ar.parties[0]).toMatchObject({ name: "عميل", unpaid: 1000 });
+  });
+  it("without the payment the full balance stands", () => {
+    const f = computeFinance(inp, "2026-09-01", "2026-09-30");
+    expect(f.ar.total).toBe(2000);
+  });
+});

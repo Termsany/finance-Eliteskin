@@ -63,7 +63,7 @@ export function Parties({ d, kind, open, x }: { d: AccData; kind: PartyKind; ope
   </div>;
 }
 
-type St = { kind: PartyKind; name: string; lines: StLine[]; totals: { invoiced: number; refunds: number; paid: number; balance: number; open: number; overdue: number; unallocated: number };
+type St = { kind: PartyKind; name: string; lines: StLine[]; totals: { invoiced: number; refunds: number; paid: number; balance: number; open: number; overdue: number; credit_applied?: number; unallocated: number };
   open: Array<{ id: number; no: string; date: string; due: string; unpaid: number; days_late: number }>; last_invoice: string | null; last_payment: string | null;
   rating?: { avg_days: number | null; paid_invoices: number; label: string; suggested_credit: number | null } | null };
 type Followup = { id: number; customer: string; note: string; promise_date: string | null; promise_amount: number | null; status: "open" | "kept" | "broken"; created_at: string };
@@ -107,6 +107,7 @@ export function StatementDrawer({ kind, name, subdomain, onClose }: { kind: Part
             {s.rating.suggested_credit !== null && <span className="text-[var(--muted)]">· حد ائتمان مقترح <b className="text-[var(--ink)]">{sar(s.rating.suggested_credit)}</b></span>}
           </div>}
           {isC && <FollowupPanel customer={name} />}
+          {(s.totals.credit_applied || 0) >= 1 && <div className="rounded-xl bg-emerald-50 p-2.5 text-[12px] text-emerald-900">اتخصم {sar(s.totals.credit_applied)} دفعات مسجّلة على العميل مش مربوطة بفواتير معيّنة في دفترة — الرصيد والمتأخر فوق بعد الخصم.</div>}
           {Math.abs(s.totals.unallocated) >= 1 && <div className="rounded-xl bg-amber-50 p-2.5 text-[12px] text-amber-900">فيه {sar(Math.abs(s.totals.unallocated))} فرق بين الحركة والفواتير المفتوحة — غالباً دفعة {s.totals.unallocated < 0 ? "مقدمة أو " : ""}مش مربوطة بفاتورة في دفترة.</div>}
           <div className="flex flex-wrap gap-2">
             {isC && s.open.length > 0 && <button type="button" onClick={() => void copy()} className="rounded-full bg-[var(--navy)] px-3.5 py-2 text-xs font-bold text-white">انسخ رسالة تذكير</button>}
