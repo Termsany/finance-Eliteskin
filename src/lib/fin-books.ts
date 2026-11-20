@@ -41,7 +41,7 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
   const credit0 = credit;
   const open = docs.filter(d => !draft(d) && d.unpaid > 0 && (d.status === 0 || d.status === 1))
     .map(d => ({ id: d.id, no: d.no, date: d.date, due: addDays(d.date, d.due_days || 0), unpaid: d.unpaid }))
-    .sort((a, b) => a.due.localeCompare(b.due) || a.date.localeCompare(b.date))   // oldest first for FIFO
+    .sort((a, b) => a.date.localeCompare(b.date) || a.due.localeCompare(b.due))   // oldest invoice date first for FIFO
     .map(o => { let u = o.unpaid; if (credit > 0) { const used = Math.min(credit, u); u = r2(u - used); credit = r2(credit - used); } return { ...o, unpaid: r2(u), days_late: Math.max(0, days(o.due, today)) }; })
     .filter(o => o.unpaid > 0)
     .sort((a, b) => b.days_late - a.days_late);

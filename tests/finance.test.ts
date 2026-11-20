@@ -131,3 +131,17 @@ describe("receivables net unapplied customer credit", () => {
     expect(f.ar.total).toBe(2000);
   });
 });
+
+describe("unapplied credit clears the oldest invoice by date (not by due date)", () => {
+  const inp = base({
+    sales: [
+      // A is the older invoice by date, but B falls due sooner (shorter terms)
+      doc({ id: 1, no: "A", date: "2026-09-01", due_days: 90, party_id: 7, party: "عميل", payment_status: 0, net: 1000, tax: 0, total: 1000, unpaid: 1000 }),
+      doc({ id: 2, no: "B", date: "2026-09-15", due_days: 10, party_id: 7, party: "عميل", payment_status: 0, net: 1000, tax: 0, total: 1000, unpaid: 1000 }),
+    ],
+  });
+  it("applies to invoice A first", () => {
+    const f = computeFinance({ ...inp, payments: [{ date: "2026-10-01", amount: 1000, client_id: 7 }] }, "2026-09-01", "2026-09-30");
+    expect(f.ar.open.map(o => o.no)).toEqual(["B"]);   // A cleared, B remains
+  });
+});
