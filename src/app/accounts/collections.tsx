@@ -146,26 +146,27 @@ export function Collections({ subdomain, open, ask }: { today: string; subdomain
   </div>;
 }
 
-type PaymentPromise = { id: number; customer: string; note: string; promise_date: string; promise_amount: number | null; status: string; overdue: boolean };
-/** Open payment promises across all customers (from the follow-up log), soonest/overdue first. */
+type PaymentPromise = { id: number; customer: string; note: string; promise_date: string; promise_amount: number | null; status: string; overdue: boolean; source?: "owner" | "rep"; rep_name?: string };
+/** Open payment promises: owner's own follow-ups + rep promises from الميدان. */
 function Promises({ open }: { open: (kind: "client", name: string) => void }) {
   const toast = useToast();
   const [d, setD] = useState<{ today: string; promises: PaymentPromise[] } | null>(null);
   const load = useCallback(() => fetch("/api/admin/finance/followups?promises=1", { cache: "no-store" }).then(r => r.json()).then(setD).catch(() => {}), []);
   useEffect(() => { void load(); }, [load]);
-  async function mark(id: number, status: string) { const r = await fetch("/api/admin/finance/followups", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, status }) }); if (r.ok) { toast(status === "kept" ? "تمام، اتسجل إنه دفع" : "اتسجل إنه ما دفعش", "success"); await load(); } }
+  async function mark(id: number, status: string) { if (id < 0) return; const r = await fetch("/api/admin/finance/followups", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, status }) }); if (r.ok) { toast(status === "kept" ? "تمام، اتسجل إنه دفع" : "اتسجل إنه ما دفعش", "success"); await load(); } }
   if (!d || !d.promises.length) return null;
   return <div className="rounded-[22px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
     <div className="mb-2 flex items-center gap-2"><Icon name="calendar" size={16} /><b className="text-[15px]">وعود الدفع ({d.promises.length})</b>
-      <span className="text-[11.5px] text-[var(--muted)]">من متابعة التحصيل — اللي فات ميعاده بالأحمر</span></div>
-    <div className="space-y-1.5">{d.promises.slice(0, 8).map(p => <div key={p.id} className={`flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-[13px] ${p.overdue ? "bg-red-50" : "bg-[var(--sky-light)]"}`}>
+      <span className="text-[11.5px] text-[var(--muted)]">من متابعتك ومن المناديب في الميدان — اللي فات ميعاده بالأحمر</span></div>
+    <div className="space-y-1.5">{d.promises.slice(0, 12).map(p => <div key={p.id} className={`flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-[13px] ${p.overdue ? "bg-red-50" : "bg-[var(--sky-light)]"}`}>
       <button type="button" onClick={() => open("client", p.customer)} className="font-bold text-[var(--navy)] hover:underline">{p.customer}</button>
+      {p.source === "rep" && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{p.rep_name || "مندوب"}</span>}
       <span className={p.overdue ? "font-bold text-red-700" : "text-[var(--muted)]"}>وعد يدفع {p.promise_amount ? `${sar(p.promise_amount)} ` : ""}يوم {p.promise_date}{p.overdue ? " — فات" : ""}</span>
       {p.note && <span className="hidden text-[var(--muted)] sm:inline">· {p.note.slice(0, 50)}</span>}
-      <span className="mr-auto flex gap-1.5">
+      {p.source !== "rep" && <span className="mr-auto flex gap-1.5">
         <button type="button" onClick={() => void mark(p.id, "kept")} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">دفع ✓</button>
         <button type="button" onClick={() => void mark(p.id, "broken")} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-red-700 ring-1 ring-red-200">ما دفعش ✗</button>
-      </span>
+      </span>}
     </div>)}</div>
   </div>;
 }
