@@ -1,15 +1,15 @@
+import { nextMonth, prevMonth } from "@/lib/fmt";
 /**
  * Expenses kept in this app (not in Daftra) — the three kinds of the first version:
  *  fixed: every month from `start` until `stop` (exclusive) or forever
  *  temp:  every month from `start` to `end` (inclusive)
  *  once:  one payment on `date`
- * They feed the P&L as operating expenses, and fixed/temp ones are the monthly fixed costs for planning and cash.
+ * For forecasting and cash planning only — actual expenses come from Daftra. Fixed/temp ones are the monthly fixed costs for break-even and cash forecast.
  */
 export type AppExpense = { id: number; name: string; cat: string; amount: number; type: "fixed" | "temp" | "once"; start: string | null; end: string | null; stop: string | null; date: string | null; note: string };
 export const CATS = ["إيجار", "مرتبات", "تسويق", "مرافق", "أقساط", "صيانة", "اشتراكات", "أخرى"] as const;
 export const TYPE_LABEL: Record<AppExpense["type"], string> = { fixed: "ثابت كل شهر", temp: "مؤقت لمدة", once: "مرة واحدة" };
 
-const nextMonth = (m: string) => { let [y, mo] = m.split("-").map(Number); mo++; if (mo > 12) { mo = 1; y++; } return `${y}-${String(mo).padStart(2, "0")}`; };
 
 /** Is the expense due in month `m` (YYYY-MM)? */
 export function activeIn(e: AppExpense, m: string) {
@@ -38,9 +38,9 @@ export function toEntries(list: AppExpense[], today: string) {
 /** Monthly fixed costs in the shape the finance engine plans with. */
 export function toFixed(list: AppExpense[]) {
   return list.filter(e => e.type !== "once" && e.start).map(e => ({ id: String(e.id), name: e.name, category: e.cat, monthly_amount: e.amount,
-    start_month: `${e.start}-01`, end_month: e.type === "temp" ? `${e.end}-01` : e.stop ? `${prevMonth(e.stop)}-01` : null, notes: e.note }));
+    start_month: `${e.start}-01`, end_month: e.type === "temp" ? `${e.end}-01` : e.stop ? `${prevMonth(e.stop)}-01` : null, notes: e.note,
+    type: e.type as "fixed" | "temp" }));
 }
-const prevMonth = (m: string) => { let [y, mo] = m.split("-").map(Number); mo--; if (mo < 1) { mo = 12; y--; } return `${y}-${String(mo).padStart(2, "0")}`; };
 
 /** Validates a new expense from the form; returns an error message or the clean row. */
 export function cleanExpense(b: Record<string, unknown>): { error: string } | Omit<AppExpense, "id"> {

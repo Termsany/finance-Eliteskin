@@ -1,12 +1,10 @@
+import { r2, addDays, daysBetween as days } from "@/lib/fmt";
 /** Pure helpers for the accounts page: party statements and the attention list. No I/O. */
 
 export type StDoc = { id: number; no: string; date: string; due_days: number; status: number; total: number; paid: number; unpaid: number; refund: number };
 export type StPay = { id: number; date: string; amount: number; invoice_id: number | null; method: string };
 export type StLine = { date: string; kind: "invoice" | "refund" | "payment"; ref: string; doc_id: number | null; debit: number; credit: number; balance: number; note: string };
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
-const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
-const days = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
 
 /**
  * Running statement. Customer: invoice = debit (they owe you), payment / refund = credit.
@@ -87,6 +85,18 @@ export function attention(x: { ar: Book; ap: Book; monthly: Mon[]; price_guard: 
   const out0 = x.stock_alerts.filter(s => s.stock_status === "out" || s.stock_status === "negative");
   if (out0.length) out.push({ level: "warn", title: `${out0.length} صنف خلص من المخزون`, text: out0.slice(0, 4).map(s => s.name).join("، "), tab: "products" });
   if (x.cost_coverage < 90) out.push({ level: "info", title: `تكلفة ${Math.round(x.cost_coverage)}% بس من المبيعات معروفة`, text: "الربح ممكن يكون أعلى من الحقيقي: أصناف اتباعت من غير فاتورة شراء ليها في دفترة.", tab: "products" });
+  if (done.length >= 3) {
+    const last3 = done.slice(-3);
+    if (last3.every((m, i) => i === 0 || m.sales < last3[i - 1].sales) && last3[0].sales > 0)
+      out.push({ level: "warn", title: "المبيعات بتنزل ٣ شهور ورا بعض", text: last3.map(m => `${m.m}: ${k(m.sales)}`).join(" ← "), tab: "pnl" });
+    const margins = last3.filter(m => m.sales > 0).map(m => (m.sales - m.cogs) / m.sales * 100);
+    if (margins.length >= 2 && margins[margins.length - 1] < margins[0] - 5)
+      out.push({ level: "warn", title: `هامش الربح نزل من ${Math.round(margins[0])}% لـ ${Math.round(margins[margins.length - 1])}%`, text: "الفرق أكتر من ٥ نقط في آخر ٣ شهور — شيك الأسعار والتكاليف.", tab: "pnl" });
+  }
+  const topAr = x.ar.parties.filter(p => p.unpaid > 0).sort((a, b) => b.unpaid - a.unpaid);
+  const arTotal = topAr.reduce((s, p) => s + p.unpaid, 0);
+  if (topAr.length > 0 && arTotal > 0 && topAr[0].unpaid / arTotal > 0.4)
+    out.push({ level: "info", title: `${Math.round(topAr[0].unpaid / arTotal * 100)}% من المديونيات عند عميل واحد`, text: `${topAr[0].name}: ${k(topAr[0].unpaid)} ر.س — مخاطرة تركّز عالية.`, tab: "clients", party: topAr[0].name, kind: "client" });
   const rank = { danger: 0, warn: 1, info: 2 } as const;
   return out.sort((a, b) => rank[a.level] - rank[b.level]).slice(0, max);
 }

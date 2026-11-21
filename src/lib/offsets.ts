@@ -1,3 +1,4 @@
+import { r2 } from "@/lib/fmt";
 /**
  * Supplier offsets («مقاصة الموردين»). A supplier invoices one of our customers directly; per item we are owed
  * (customer price − our price) × qty, and the supplier deducts it from what we owe once it has collected.
@@ -17,7 +18,6 @@ export const STATUS_LABEL: Record<OffsetStatus, string> = { printed: "اتطبع
 /** An order not settled after this many days is flagged. */
 export const LATE_DAYS = 30;
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
 const DAY = 864e5;
 const days = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY);
 

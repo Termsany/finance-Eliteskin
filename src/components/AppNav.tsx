@@ -8,7 +8,7 @@ import { Logo, BrandMark, Wordmark } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NAV, activeHref, tabLabel } from "@/lib/nav";
 
-const strip = ({ href, label, icon }: { href: string; label: string; icon: string }) => ({ href, label, icon });
+const strip = ({ href, label, icon, section }: { href: string; label: string; icon: string; section?: string }) => ({ href, label, icon, section });
 function useActive() {
   const path = usePathname(), sp = useSearchParams();
   return activeHref(path, sp.get("tab"));

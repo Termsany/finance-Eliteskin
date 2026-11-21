@@ -14,7 +14,7 @@ export type Payment = { date: string; amount: number; client_id: number | null }
 export type Entry = { id: number; kind: "expense" | "income"; date: string; amount: number; tax: number; account_id: number | null; vendor: string; note: string };
 export type Account = { id: number; code: string; name: string };
 export type Treatment = "opex" | "cogs" | "exclude";
-export type Fixed = { id: string; name: string; category: string; monthly_amount: number; start_month: string; end_month: string | null; notes: string };
+export type Fixed = { id: string; name: string; category: string; monthly_amount: number; start_month: string; end_month: string | null; notes: string; type: "fixed" | "temp" };
 export type Settings = { target_gross_margin: number; target_net_margin: number; books_start?: string | null };
 /** P&L, advice and audits only count from the books start date; receivables/payables keep every open document. */
 export function clampRange(inp: Pick<Input, "settings">, from: string, to: string): [string, string] {
@@ -29,7 +29,7 @@ const month = (d: string) => d.slice(0, 7);
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
 export const norm = (s: string) => s.toLowerCase().replace(/[\s\-_()]+/g, " ").replace(/\s+/g, " ").trim();
 /** Share of a document still standing after refunds (fully refunded → 0). */
-const keep = (d: Doc) => d.total > 0 ? Math.max(0, 1 - d.refund / d.total) : 1;
+const keep = (d: Doc) => d.payment_status === 3 ? 0 : d.total > 0 ? Math.max(0, 1 - d.refund / d.total) : 1;
 export function monthsBetween(from: string, to: string) { const out: string[] = []; let [y, m] = from.slice(0, 7).split("-").map(Number); const [ty, tm] = to.slice(0, 7).split("-").map(Number); while ((y < ty || (y === ty && m <= tm)) && out.length < 120) { out.push(`${y}-${String(m).padStart(2, "0")}`); if (m === 12) { y++; m = 1; } else m++; } return out; }
 export function bucket(daysPastDue: number) { return daysPastDue <= 0 ? "current" : daysPastDue <= 30 ? "1-30" : daysPastDue <= 60 ? "31-60" : daysPastDue <= 90 ? "61-90" : "90+"; }
 

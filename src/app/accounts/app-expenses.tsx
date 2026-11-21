@@ -8,7 +8,7 @@ import { sar, Card, Pill } from "./kit";
 const TYPE_CLS: Record<AppExpense["type"], string> = { fixed: "bg-sky-50 text-sky-700 ring-sky-200", temp: "bg-amber-50 text-amber-800 ring-amber-200", once: "bg-slate-100 text-slate-600 ring-slate-200" };
 type Form = { id?: number; name: string; cat: string; amount: string; type: AppExpense["type"]; start: string; end: string; date: string; note: string };
 
-/** Expenses kept in this app (not in Daftra): fixed every month, temporary for a period, or a single payment. They count in the P&L. */
+/** Expenses kept in this app (not in Daftra) for forecasting and cash planning only — actual expenses come from Daftra. */
 export function AppExpenses({ today, reload }: { today: string; reload: () => void }) {
   const toast = useToast();
   const month = today.slice(0, 7);
@@ -47,7 +47,7 @@ export function AppExpenses({ today, reload }: { today: string; reload: () => vo
   const period = (e: AppExpense) => e.type === "once" ? e.date : e.type === "temp" ? `${e.start} ← ${e.end}` : `من ${e.start}${e.stop ? ` · متوقف من ${e.stop}` : ""}`;
   const inp = "rounded-lg border border-[var(--border)] px-2.5 py-2 text-sm";
 
-  return <Card title="مصروفات البرنامج" hint="المصروفات اللي مش متسجلة في دفترة (إيجار، مرتبات، أقساط…). بتدخل في الأرباح والخسائر كمصروف تشغيلي، والثابتة منها بتتحسب في السيولة ونقطة التعادل. لو المصروف متسجل في دفترة كمان، ما تضيفوش هنا عشان ما يتحسبش مرتين."
+  return <Card title="مصروفات البرنامج" hint="مصروفات للتخطيط والتوقع بس — المصاريف الفعلية بتيجي من دفترة. الثابتة بتتحسب في السيولة ونقطة التعادل. لو المصروف متسجل في دفترة كمان، ما تضيفوش هنا عشان ما يتحسبش مرتين."
     right={<button type="button" onClick={() => setForm(blank)} className="flex items-center gap-1 rounded-full bg-[var(--navy)] px-3.5 py-1.5 text-xs font-bold text-white"><Icon name="new-visit" size={14} />إضافة مصروف</button>}>
     <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
       <div className="rounded-2xl bg-[var(--sky-light)] p-3"><div className="text-[11px] font-bold text-[var(--muted)]">مصروفات الشهر ده</div><div className="text-lg font-extrabold tabular-nums">{sar(monthTotal)}</div></div>
@@ -70,7 +70,7 @@ export function AppExpenses({ today, reload }: { today: string; reload: () => vo
 
     <div className="mb-2 flex gap-1 rounded-xl bg-[var(--bg)] p-1 text-xs font-bold">{([["month", "اللي عليا الشهر ده"], ["all", "كل البنود"]] as const).map(([k, l]) => <button key={k} type="button" onClick={() => setView(k)} className={`flex-1 rounded-lg px-3 py-1.5 ${view === k ? "bg-[var(--card)] text-[var(--navy)] shadow-sm" : "text-[var(--muted)]"}`}>{l}</button>)}</div>
     {list === null ? <div className="h-20 animate-pulse rounded-xl bg-[var(--bg)]" />
-      : !rows.length ? <div className="py-6 text-center text-sm text-[var(--muted)]">{view === "month" ? "مفيش مصروفات على الشهر ده." : "لسه ما ضفتش مصروفات — ضيف المرتبات والإيجار عشان الربح يطلع صح."}</div>
+      : !rows.length ? <div className="py-6 text-center text-sm text-[var(--muted)]">{view === "month" ? "مفيش مصروفات على الشهر ده." : "لسه ما ضفتش مصروفات — ضيف المرتبات والإيجار عشان التوقعات والسيولة تطلع صح."}</div>
       : <div className="divide-y divide-[var(--border)]">{rows.map(e => <div key={e.id} className="flex flex-wrap items-center gap-2 py-2.5 text-sm">
         <div className="min-w-0 flex-1"><b>{e.name}</b> <span className="text-[11px] text-[var(--muted)]">· {e.cat} · {period(e)}{e.note ? ` · ${e.note}` : ""}</span></div>
         <Pill text={TYPE_LABEL[e.type]} cls={TYPE_CLS[e.type]} />

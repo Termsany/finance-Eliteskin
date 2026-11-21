@@ -55,7 +55,8 @@ function Books() {
   const toast = useToast();
   const [v, setV] = useState<string | null>(null); const [gm, setGm] = useState(45); const [nm, setNm] = useState(15);
   const [st, setSt] = useState(""); const [pt, setPt] = useState("");
-  useEffect(() => { fetch("/api/admin/finance/settings", { cache: "no-store" }).then(r => r.json()).then(j => { setV(j.books_start || ""); if (j.target_gross_margin) setGm(j.target_gross_margin); if (j.target_net_margin !== undefined) setNm(j.target_net_margin); setSt(j.monthly_sales_target != null ? String(j.monthly_sales_target) : ""); setPt(j.monthly_profit_target != null ? String(j.monthly_profit_target) : ""); }).catch(() => {}); }, []);
+  const [sp, setSp] = useState("3"); const [pp, setPp] = useState("5");
+  useEffect(() => { fetch("/api/admin/finance/settings", { cache: "no-store" }).then(r => r.json()).then(j => { setV(j.books_start || ""); if (j.target_gross_margin) setGm(j.target_gross_margin); if (j.target_net_margin !== undefined) setNm(j.target_net_margin); setSt(j.monthly_sales_target != null ? String(j.monthly_sales_target) : ""); setPt(j.monthly_profit_target != null ? String(j.monthly_profit_target) : ""); if (j.sample_pct != null) setSp(String(j.sample_pct)); if (j.promo_pct != null) setPp(String(j.promo_pct)); }).catch(() => {}); }, []);
   async function put(body: object, ok: string) {
     const r = await fetch("/api/admin/finance/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => null); if (r.ok) toast(ok, "success"); else toast(j?.error || "تعذر الحفظ", "error");
@@ -81,6 +82,15 @@ function Books() {
         <label><span className={lbl}>صافي ربح الشهر المستهدف (ر.س)</span><input value={pt} onChange={e => setPt(e.target.value)} inputMode="decimal" dir="ltr" placeholder="مثلاً 75000" className={inp} /></label>
       </div>
       <button type="button" onClick={() => void put({ monthly_sales_target: st === "" ? null : Number(st.replace(/,/g, "")), monthly_profit_target: pt === "" ? null : Number(pt.replace(/,/g, "")) }, "اتحفظ هدف الشهر")} className={`mt-3 ${btn}`}>حفظ هدف الشهر</button>
+    </div>
+    <div className="mt-5 border-t border-[var(--border)] pt-4">
+      <div className="text-sm font-extrabold">العينات والدعاية</div>
+      <p className="mt-1 text-xs leading-5 text-[var(--muted)]">النسبة الافتراضية لكل المندوبين. لو مندوب ليه نسبة مختلفة، اضبطها من صفحة المندوبين. العينات = % من الوحدات المباعة الشهر اللي فات. الدعاية = % من إجمالي مبلغ البيع الشهر اللي فات.</p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <label><span className={lbl}>نسبة العينات الافتراضية %</span><input type="number" min={0} max={100} step={0.5} value={sp} onChange={e => setSp(e.target.value)} className={inp} /></label>
+        <label><span className={lbl}>نسبة الدعاية الافتراضية %</span><input type="number" min={0} max={100} step={0.5} value={pp} onChange={e => setPp(e.target.value)} className={inp} /></label>
+      </div>
+      <button type="button" onClick={() => void put({ sample_pct: Number(sp), promo_pct: Number(pp) }, "اتحفظت نسب العينات والدعاية")} className={`mt-3 ${btn}`}>حفظ</button>
     </div>
   </div>;
 }

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { computeFinance, loadInput, riyadhToday } from "@/lib/finance";
 import { monthEnd } from "@/lib/collections";
 import { query } from "@/lib/db";
+import { prevMonth } from "@/lib/fmt";
 import PrintBar from "./PrintBar";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,6 @@ const k = (n: number | null | undefined) => n === null || n === undefined ? "—
 const C = { ink: "#16232b", muted: "#5f7177", navy: "#10484f", red: "#b42318", amber: "#b7791f", green: "#1e7a5a", border: "#e3ecec", soft: "#f3faf9" };
 const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const mLabel = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
-const prevMonth = (m: string) => { const [y, mo] = m.split("-").map(Number); const d = new Date(Date.UTC(y, mo - 2, 1)); return d.toISOString().slice(0, 7); };
 const SEL = /^20\d\d-(0[1-9]|1[0-2])$/;
 
 /** Printable monthly report (A4): P&L, receivables/payables, VAT, compared to last month, with a close checklist. */

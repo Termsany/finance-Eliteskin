@@ -1,3 +1,4 @@
+import { r2 } from "@/lib/fmt";
 /**
  * What has to be collected from customers (or paid to suppliers) in a month: everything already overdue
  * plus everything falling due before the month ends. Pure — the API feeds it the open documents.
@@ -10,7 +11,6 @@ export type Group = { party: string; total: number; overdue: number; due: number
 const DAY = 864e5;
 const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
 const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-const r2 = (n: number) => Math.round(n * 100) / 100;
 export const monthEnd = (m: string) => { const [y, mo] = m.split("-").map(Number); return new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10); };
 
 /**

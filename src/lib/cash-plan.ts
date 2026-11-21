@@ -19,6 +19,7 @@
  *    fixed instalment (annuity) over n months after an optional grace period
  */
 import { addMonths, monthLabel } from "@/lib/collections";
+import { r0 } from "@/lib/fmt";
 
 export type PlanInputs = {
   today: string;
@@ -32,6 +33,7 @@ export type PlanInputs = {
   // the products the plan's new sales are assumed to be, and the blended cost ratio from them
   plan_cogs_ratio: number;
   products: Array<{ key: string; name: string; cost: number; price: number; cost_ratio: number; qty_sold: number }>;
+  collect_pct?: number;
 };
 export type PlanOpts = {
   sales: number;        // planned net monthly sales (before VAT) from next month
@@ -47,7 +49,6 @@ export type PlanOpts = {
 };
 
 const VAT = 0.15;
-const r0 = (n: number) => Math.round(n);
 const ym = (d: string) => Number(d.slice(0, 4)) * 12 + Number(d.slice(5, 7)) - 1;
 const idx = (today: string, d: string) => ym(d) - ym(today);
 

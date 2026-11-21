@@ -4,7 +4,8 @@ import { buildBriefing, type BriefingInput } from "@/lib/briefing";
 const base: BriefingInput = {
   today: "2026-11-17", collected_yesterday: 12000, collected_month: 50000,
   due_today: 8000, overdue: 53670, overdue_parties: 6, ar_total: 88092, ap_week: 34500,
-  balance: 120000, net_month: -18697, sales_month: 15458,
+  balance: 120000, net_month: -18697, sales_month: 15458, gross_margin: 42,
+  sales_target: 500000, profit_target: 75000,
   due_promises: [{ customer: "مركز الشفاء", amount: 5000 }], urgent: [{ title: "وعد دفع فات ميعاده" }],
 };
 
