@@ -11,11 +11,12 @@ const forbid = () => NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
 export async function GET(req: Request) {
   const u = await getCurrentUser(); if (!u || u.role !== "admin") return forbid();
+  try {
   const today = riyadhToday(); const inp = await loadInput(today);
   const fin = computeFinance(inp, `${today.slice(0, 7)}-01`, today);
   const s = (await query<{ cash_balance: number | null; cash_as_of: string | null; vat_filing: string; cash_collect_pct: number }>(
     "SELECT cash_balance::float8, cash_as_of::text, vat_filing, cash_collect_pct FROM fin_settings WHERE id=1"
-  )).rows[0];
+  ).catch(() => ({ rows: [] as never[] }))).rows[0];
   const url = new URL(req.url);
   const includeNew = url.searchParams.get("new") === "1";
   const offsets = openBySupplier(await loadOrders().catch(() => []));
@@ -87,6 +88,10 @@ export async function GET(req: Request) {
     balance_log: balanceLog,
     forecast,
   });
+  } catch (e) {
+    console.error("cash GET error:", e);
+    return NextResponse.json({ error: "تعذر تحميل بيانات السيولة" }, { status: 500 });
+  }
 }
 
 /** Opening cash (bank + treasury) entered by the admin — Daftra balances aren't mirrored. */

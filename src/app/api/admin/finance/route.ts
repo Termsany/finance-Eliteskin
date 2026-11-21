@@ -20,6 +20,7 @@ export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const from = sp.get("from") || "", to = sp.get("to") || "";
   if (!DAY.test(from) || !DAY.test(to) || from > to) return NextResponse.json({ error: "فترة غير صحيحة" }, { status: 400 });
+  try {
   await syncIfStale(60);
   const today = riyadhToday();
   const [inp, sync] = await Promise.all([loadInput(today), query("SELECT started_at, finished_at, ok, message, invoices FROM daftra_sync WHERE id=1")]);
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
   const collect = { ...cp.totals, month: cm, due_month: cp.totals.month, done: receivedIn(inp.payments, `${cm}-01`, today), end: monthEnd(cm) };
   // budget: this calendar month's sales/profit vs the owner's targets, plus break-even (always current month, not the chosen range)
   const curFin = cm === fin.period.from.slice(0, 7) && to === today ? fin : computeFinance(inp, `${cm}-01`, today);
-  const bt = (await query<{ monthly_sales_target: number | null; monthly_profit_target: number | null }>("SELECT monthly_sales_target::float8, monthly_profit_target::float8 FROM fin_settings WHERE id=1")).rows[0];
+  const bt = (await query<{ monthly_sales_target: number | null; monthly_profit_target: number | null }>("SELECT monthly_sales_target::float8, monthly_profit_target::float8 FROM fin_settings WHERE id=1").catch(() => ({ rows: [] as never[] }))).rows[0];
   const budget = computeBudget({ today, monthSales: curFin.kpi.sales, monthNet: curFin.kpi.net,
     grossMarginPct: curFin.kpi.gross_margin ?? inp.settings.target_gross_margin, fixedMonthly: curFin.fixed_monthly, monthOpex: curFin.kpi.opex,
     salesTarget: bt?.monthly_sales_target ?? null, profitTarget: bt?.monthly_profit_target ?? null });
@@ -50,4 +51,8 @@ export async function GET(req: Request) {
   const offMap = openBySupplier(offOrders);
   const offsets = { open: Math.round(Object.values(offMap).reduce((s, v) => s + v, 0) * 100) / 100, bySupplier: offMap };
   return NextResponse.json({ ...fin, docs, attention: todo, collect, offsets, budget, prev, link: null, ai: (await aiStatus()).configured, sync: { ...sync.rows[0], running: syncRunning() }, today });
+  } catch (e) {
+    console.error("finance GET error:", e);
+    return NextResponse.json({ error: "تعذر تحميل البيانات المالية" }, { status: 500 });
+  }
 }
