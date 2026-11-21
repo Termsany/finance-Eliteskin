@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { query } from "@/lib/db";
 import { riyadhToday } from "@/lib/finance";
+import { fetchFieldData } from "@/lib/field-data";
 
 const forbid = () => NextResponse.json({ error: "Forbidden" }, { status: 403 });
 const bad = (m: string) => NextResponse.json({ error: m }, { status: 400 });
@@ -15,9 +16,22 @@ export async function GET(req: Request) {
   const customer = (sp.get("customer") || "").trim();
   if (sp.get("promises") === "1") {
     const today = riyadhToday();
-    const r = await query(`SELECT ${COLS} FROM collection_followups WHERE status='open' AND promise_date IS NOT NULL ORDER BY promise_date`);
-    const rows = r.rows.map(f => ({ ...f, id: Number(f.id), overdue: String(f.promise_date) < today }));
-    return NextResponse.json({ today, promises: rows });
+    const [r, field] = await Promise.all([
+      query(`SELECT ${COLS} FROM collection_followups WHERE status='open' AND promise_date IS NOT NULL ORDER BY promise_date`),
+      fetchFieldData(),
+    ]);
+    type PromiseRow = { id: number; customer: string; note: string; promise_date: string | null; promise_amount: number | null; status: string; created_at: string; overdue: boolean; source: "owner" | "rep"; rep_name?: string };
+    const rows: PromiseRow[] = (r.rows as Array<{ id: string; customer: string; note: string; promise_date: string; promise_amount: number | null; status: string; created_at: string }>).map(f => ({ ...f, id: Number(f.id), overdue: f.promise_date < today, source: "owner" as const }));
+    const repFollowups: PromiseRow[] = (field?.followups || [])
+      .filter(f => f.result === "promised" && f.promise_date)
+      .map((f, i) => ({
+        id: -(i + 1), customer: `عميل #${f.client_id}`, note: f.note || `${f.rep_name}: وعد بالدفع`,
+        promise_date: f.promise_date, promise_amount: f.promise_amount, status: "open",
+        created_at: f.created_at, overdue: String(f.promise_date) < today,
+        source: "rep" as const, rep_name: f.rep_name,
+      }));
+    const all = [...rows, ...repFollowups].sort((a, b) => String(a.promise_date).localeCompare(String(b.promise_date)));
+    return NextResponse.json({ today, promises: all });
   }
   if (!customer) return bad("اختار العميل");
   const r = await query(`SELECT ${COLS} FROM collection_followups WHERE customer=$1 ORDER BY created_at DESC`, [customer]);

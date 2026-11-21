@@ -39,5 +39,10 @@ export async function GET(req: Request) {
     monthly: fin.monthly,
     pricing: fin.pricing,
     budget,
+    goals: {
+      monthly_sales_target: bt?.monthly_sales_target ?? null,
+      monthly_profit_target: bt?.monthly_profit_target ?? null,
+      fixed_monthly: fin.fixed_monthly,
+    },
   });
 }
