@@ -23,3 +23,4 @@ uploads/
 *.log
 .DS_Store
 legacy/
+AGENTS.md
