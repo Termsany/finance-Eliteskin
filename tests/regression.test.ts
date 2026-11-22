@@ -152,6 +152,28 @@ describe("bug 20: supplier statement with real payment records", () => {
   });
 });
 
+// Bug 21: supplier standalone returns reduce supplier balance
+describe("bug 21: supplier standalone returns in statement", () => {
+  it("standalone return reduces supplier balance", () => {
+    const docs: StDoc[] = [
+      { id: 1, no: "P1", date: "2026-09-01", due_days: 30, status: 0, total: 5000, paid: 0, unpaid: 5000, refund: 0 },
+    ];
+    const pays: StPay[] = [
+      { id: 99, date: "2026-10-01", amount: 1000, invoice_id: null, method: "return" },
+    ];
+    const st = statement("supplier", docs, pays, "2026-11-30");
+    const retLine = st.lines.find(l => l.kind === "refund");
+    expect(retLine).toBeDefined();
+    expect(retLine!.debit).toBe(1000);
+    // Balance: 5000 (purchase) - 1000 (return) = 4000 owed
+    expect(st.totals.balance).toBe(4000);
+    // Return should NOT count as "paid"
+    expect(st.totals.paid).toBe(0);
+    // Return should be in refunds total
+    expect(st.totals.refunds).toBe(1000);
+  });
+});
+
 // Bug 19: export label change (verified indirectly — the actual test is reading the route file)
 describe("bug 19: export label correctness", () => {
   it("placeholder: export label changed from breakeven to target margin", () => {

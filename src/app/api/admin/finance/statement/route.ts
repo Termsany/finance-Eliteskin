@@ -24,6 +24,8 @@ export async function GET(req: Request) {
   } else if (kind === "supplier" && ids.length) {
     pays = (await query<{ id: string; date: string; amount: number; invoice_id: string | null; method: string }>(
       "SELECT id, pay_date::text date, amount::float8, purchase_id invoice_id, method FROM daftra_purchase_payments WHERE supplier_id = ANY($1::bigint[]) ORDER BY pay_date, id", [ids]).catch(() => ({ rows: [] }))).rows;
+    for (const r of (await query<{ date: string; amount: number }>("SELECT pay_date::text date, amount::float8 FROM daftra_supplier_standalone_returns WHERE supplier_id = ANY($1::bigint[])", [ids]).catch(() => ({ rows: [] }))).rows)
+      pays.push({ id: "0", date: r.date, amount: r.amount, invoice_id: null, method: "return" });
   }
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
   const rating = kind === "client"

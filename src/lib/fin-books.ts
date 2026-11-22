@@ -40,8 +40,8 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
   }
   if (kind === "supplier") for (const p of pays) {
     if (p.invoice_id && returnedIds.has(p.invoice_id)) continue;
-    lines.push({ date: p.date, kind: "payment", ref: String(p.id), doc_id: p.invoice_id, debit: p.amount, credit: 0,
-      note: p.method ? `دفعة (${p.method})` : "دفعة" });
+    lines.push({ date: p.date, kind: isRet(p) ? "refund" : "payment", ref: String(p.id), doc_id: p.invoice_id, debit: p.amount, credit: 0,
+      note: isRet(p) ? "مرتجعات مش مربوطة بفاتورة شراء" : p.method ? `دفعة (${p.method})` : "دفعة" });
   }
   const order = { invoice: 0, refund: 1, payment: 2 } as const;
   lines.sort((a, b) => a.date.localeCompare(b.date) || order[a.kind] - order[b.kind]);
@@ -64,7 +64,7 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
     lines: out,
     totals: { invoiced: r2(docs.filter(d => !fullyReturned(d)).reduce((s, d) => s + d.total, 0)), refunds: r2(docs.filter(d => !fullyReturned(d)).reduce((s, d) => s + d.refund, 0) + pays.filter(p => isRet(p) && !(p.invoice_id && returnedIds.has(p.invoice_id))).reduce((s, p) => s + p.amount, 0)),
       paid: r2(kind === "client" ? pays.filter(p => !isRet(p) && !(p.invoice_id && returnedIds.has(p.invoice_id))).reduce((s, p) => s + p.amount, 0)
-        : pays.length > 0 ? pays.filter(p => !(p.invoice_id && returnedIds.has(p.invoice_id))).reduce((s, p) => s + p.amount, 0)
+        : pays.length > 0 ? pays.filter(p => !isRet(p) && !(p.invoice_id && returnedIds.has(p.invoice_id))).reduce((s, p) => s + p.amount, 0)
         : docs.filter(d => !fullyReturned(d)).reduce((s, d) => s + Math.max(0, d.total - d.refund - d.unpaid), 0)),
       balance: r2(bal), open: openTotal, overdue: r2(open.filter(o => o.days_late > 0).reduce((s, o) => s + o.unpaid, 0)),
       // customer credit already netted off the open invoices above; what's left is an advance beyond every open invoice
