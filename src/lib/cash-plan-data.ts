@@ -5,6 +5,19 @@ import { loadOrders } from "@/lib/offsets-data";
 import type { PlanInputs, PlanOpts } from "@/lib/cash-plan";
 
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
+
+async function daftraCashTotal(): Promise<number | null> {
+  const r = (await query<{ balance: number | null }>(
+    "SELECT balance::float8 FROM daftra_accounts WHERE (code LIKE '1201%' OR code LIKE '1202%') AND balance IS NOT NULL"
+  ).catch(() => ({ rows: [] }))).rows;
+  if (r.length === 0) {
+    const je = (await query<{ total: number }>(
+      "SELECT (sum(debit) - sum(credit))::float8 total FROM daftra_journal_entries j JOIN daftra_accounts a ON a.id = j.account_id WHERE a.code LIKE '1201%' OR a.code LIKE '1202%'"
+    ).catch(() => ({ rows: [] }))).rows;
+    return je[0]?.total != null ? Math.round(je[0].total * 100) / 100 : null;
+  }
+  return Math.round(r.reduce((s, a) => s + (a.balance || 0), 0) * 100) / 100;
+}
 /** The products the plan's new sales are built on — their purchase cost drives the supplier payments. */
 export const PLAN_PRODUCTS = ["arche", "spectra", "dermomine", "gro"];
 
@@ -37,7 +50,7 @@ export async function loadPlanInputs(): Promise<PlanInputs> {
     : products.reduce((a, x) => a + x.cost_ratio, 0) / products.length;
 
   return {
-    today, opening: s?.cash_balance ?? 0, opening_as_of: s?.cash_as_of ?? null,
+    today, opening: await daftraCashTotal() ?? s?.cash_balance ?? 0, opening_as_of: s?.cash_as_of ?? null,
     ar: fin.ar.open.map(o => ({ unpaid: o.unpaid, due: o.due })),
     ap: fin.ap.open.map(o => ({ party: o.party, unpaid: o.unpaid, due: o.due })),
     offsets, vat_due: Math.max(0, fin.kpi.vat_payable),

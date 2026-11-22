@@ -223,7 +223,28 @@ async function doSync(): Promise<SyncResult> {
         unlinked: tally(payments.filter(p => !num(p.invoice_id)), () => "unlinked", p => num(p.amount)).unlinked || { n: 0, sum: 0 },
         no_client: payments.filter(p => !num(p.client_id)).length } }));
     const accounts = await listAll("journal_accounts", "JournalAccount");
-    await replaceAll("daftra_accounts", ["id", "code", "name", "cat_id"], accounts.map(a => [num(a.id), String(a.code || ""), String(a.name || "").trim(), a.journal_cat_id ? num(a.journal_cat_id) : null]));
+    await replaceAll("daftra_accounts", ["id", "code", "name", "cat_id", "balance", "debit_total", "credit_total"],
+      accounts.map(a => [num(a.id), String(a.code || ""), String(a.name || "").trim(), a.journal_cat_id ? num(a.journal_cat_id) : null,
+        a.balance !== undefined ? num(a.balance) : null, a.debit_total !== undefined ? num(a.debit_total) : null, a.credit_total !== undefined ? num(a.credit_total) : null]));
+    // Try to sync journal entries for bank/treasury balance computation
+    try {
+      const je = await listAll("journal_entries", "JournalEntry");
+      const jeRows: unknown[][] = [];
+      for (const e of je) {
+        const eid = num(e.id);
+        const edate = isoDate(e.date || e.entry_date);
+        if (!edate) continue;
+        const lines = Array.isArray(e.journal_entry_items) ? e.journal_entry_items : Array.isArray(e.items) ? e.items : [];
+        for (const l of lines as Json[]) {
+          const lid = num(l.id || l.item_id || 0);
+          if (!lid) continue;
+          jeRows.push([lid, eid, edate, num(l.journal_account_id || l.account_id), num(l.debit), num(l.credit), String(l.description || l.note || "")]);
+        }
+      }
+      if (jeRows.length > 0) {
+        await replaceAll("daftra_journal_entries", ["id", "entry_id", "entry_date", "account_id", "debit", "credit", "description"], jeRows);
+      }
+    } catch { /* journal_entries endpoint may not exist — that's ok, we'll use account balances or manual entry */ }
     const exp = (await listAll("expenses", "Expense")).map(e => mapCash(e, "expense")), inc = (await listAll("incomes", "Income")).map(e => mapCash(e, "income"));
     const entries = [...exp, ...inc].filter(e => e.entry_date);
     await replaceAll("daftra_cash_entries", ["id", "kind", "entry_date", "amount", "tax", "account_id", "vendor", "note", "modified"],

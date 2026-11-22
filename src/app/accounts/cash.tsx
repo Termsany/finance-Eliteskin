@@ -9,8 +9,10 @@ import { CashPlan } from "./cash-plan";
 
 type F = CashForecastResult;
 type BalLog = { week_start: string; actual: number; forecast: number | null };
+type DaftraBal = { bank: number; treasury: number; total: number; accounts: Array<{ code: string; name: string; balance: number }> } | null;
 type Data = {
   today: string; cash_balance: number | null; cash_as_of: string | null;
+  daftra_balance: DaftraBal; effective_balance: number;
   vat_period: number; vat_filing: VatFiling; collect_pct: number;
   balance_log: BalLog[];
   forecast: F;
@@ -186,15 +188,40 @@ export function CashTab({ go }: { go: (t: Tab) => void }) {
   const bannerIconColor = neg !== null ? "text-red-600" : f.lowest.balance < f.safety_line ? "text-amber-600" : "text-emerald-700";
 
   return <div className="space-y-4">
-    {/* ── Balance input ── */}
-    <Card title="رصيدك النهارده (بنك + خزنة)" hint="دفترة مش بتبعت أرصدة البنك، فاكتب رصيدك الفعلي النهارده وأنا أحسب منه السيولة. حدّثه كل أسبوع عشان نتابع دقة التوقع.">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="min-w-48 flex-1"><span className="text-xs text-[var(--muted)]">الرصيد بالريال</span><input value={bal} onChange={e => setBal(e.target.value)} inputMode="decimal" placeholder="مثلاً 250000" dir="ltr" className="mt-1 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-bold" /></label>
-        <button type="button" onClick={() => void saveBal()} disabled={!bal || Number(bal.replace(/,/g, "")) === d.cash_balance} className="rounded-xl bg-[var(--navy)] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">احفظ الرصيد</button>
-        <span className="text-[11px] text-[var(--muted)]">{d.cash_as_of ? `آخر تحديث ${d.cash_as_of}` : "لسه ما اتسجلش رصيد — الحساب دلوقتي بيبدأ من صفر"}</span>
-      </div>
-      {stale && <p className="mt-2 rounded-xl bg-amber-50 p-2 text-[11.5px] text-amber-900 ring-1 ring-amber-200">الرصيد ده عمره أكتر من أسبوع — حدّثه عشان التوقع يبقى دقيق.</p>}
-    </Card>
+    {/* ── Balance ── */}
+    {d.daftra_balance ? (
+      <Card title="رصيد البنك والخزنة (من دفترة)" hint="الأرصدة بتتحدث مع كل مزامنة تلقائية من دفترة.">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-emerald-50 p-3 text-center ring-1 ring-emerald-200">
+            <div className="text-[11px] text-emerald-800">البنك</div>
+            <div className="text-lg font-bold text-emerald-900">{sar(d.daftra_balance.bank)}</div>
+          </div>
+          <div className="rounded-xl bg-blue-50 p-3 text-center ring-1 ring-blue-200">
+            <div className="text-[11px] text-blue-800">الخزنة</div>
+            <div className="text-lg font-bold text-blue-900">{sar(d.daftra_balance.treasury)}</div>
+          </div>
+          <div className="col-span-2 rounded-xl bg-[var(--bg)] p-3 text-center ring-1 ring-[var(--border)] sm:col-span-1">
+            <div className="text-[11px] text-[var(--muted)]">الإجمالي</div>
+            <div className="text-lg font-bold text-[var(--navy)]">{sar(d.daftra_balance.total)}</div>
+          </div>
+        </div>
+        {d.daftra_balance.accounts.length > 2 && <details className="mt-2">
+          <summary className="cursor-pointer text-[11px] text-[var(--muted)]">تفاصيل الحسابات ({d.daftra_balance.accounts.length})</summary>
+          <div className="mt-1 space-y-0.5 text-[11px]">
+            {d.daftra_balance.accounts.map(a => <div key={a.code} className="flex justify-between"><span>{a.code} — {a.name}</span><b>{sar(a.balance)}</b></div>)}
+          </div>
+        </details>}
+      </Card>
+    ) : (
+      <Card title="رصيدك النهارده (بنك + خزنة)" hint="دفترة مش بتبعت أرصدة البنك — اكتب رصيدك الفعلي النهارده وأنا أحسب منه السيولة. لو دفترة بعتت أرصدة الحسابات (1201/1202) هتظهر تلقائي.">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="min-w-48 flex-1"><span className="text-xs text-[var(--muted)]">الرصيد بالريال</span><input value={bal} onChange={e => setBal(e.target.value)} inputMode="decimal" placeholder="مثلاً 250000" dir="ltr" className="mt-1 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-bold" /></label>
+          <button type="button" onClick={() => void saveBal()} disabled={!bal || Number(bal.replace(/,/g, "")) === d.cash_balance} className="rounded-xl bg-[var(--navy)] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">احفظ الرصيد</button>
+          <span className="text-[11px] text-[var(--muted)]">{d.cash_as_of ? `آخر تحديث ${d.cash_as_of}` : "لسه ما اتسجلش رصيد — الحساب دلوقتي بيبدأ من صفر"}</span>
+        </div>
+        {stale && <p className="mt-2 rounded-xl bg-amber-50 p-2 text-[11.5px] text-amber-900 ring-1 ring-amber-200">الرصيد ده عمره أكتر من أسبوع — حدّثه عشان التوقع يبقى دقيق.</p>}
+      </Card>
+    )}
 
     {/* ── Decision banner ── */}
     <div className={`flex items-start gap-3 rounded-2xl border p-4 text-[13px] leading-6 ${bannerColor}`}>

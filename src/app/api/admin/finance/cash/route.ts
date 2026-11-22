@@ -9,6 +9,40 @@ import { rateCustomer } from "@/lib/fin-rating";
 
 const forbid = () => NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+/** Compute bank + treasury balances from Daftra account data. Returns null if not available. */
+async function daftraBalances(): Promise<{ bank: number; treasury: number; total: number; accounts: Array<{ code: string; name: string; balance: number }> } | null> {
+  // Method 1: use balance field on journal_accounts (codes 1201xx=bank, 1202xx=treasury)
+  const accts = (await query<{ code: string; name: string; balance: number | null; debit_total: number | null; credit_total: number | null }>(
+    "SELECT code, name, balance::float8, debit_total::float8, credit_total::float8 FROM daftra_accounts WHERE code LIKE '1201%' OR code LIKE '1202%'"
+  ).catch(() => ({ rows: [] }))).rows;
+  if (accts.length > 0 && accts.some(a => a.balance !== null)) {
+    const list = accts.filter(a => a.balance !== null).map(a => ({ code: a.code, name: a.name, balance: a.balance! }));
+    const bank = list.filter(a => a.code.startsWith("1201")).reduce((s, a) => s + a.balance, 0);
+    const treasury = list.filter(a => a.code.startsWith("1202")).reduce((s, a) => s + a.balance, 0);
+    return { bank: Math.round(bank * 100) / 100, treasury: Math.round(treasury * 100) / 100, total: Math.round((bank + treasury) * 100) / 100, accounts: list };
+  }
+  // Method 2: compute from debit_total - credit_total (asset accounts: debit=increase)
+  if (accts.length > 0 && accts.some(a => a.debit_total !== null)) {
+    const list = accts.filter(a => a.debit_total !== null).map(a => ({ code: a.code, name: a.name, balance: Math.round(((a.debit_total || 0) - (a.credit_total || 0)) * 100) / 100 }));
+    const bank = list.filter(a => a.code.startsWith("1201")).reduce((s, a) => s + a.balance, 0);
+    const treasury = list.filter(a => a.code.startsWith("1202")).reduce((s, a) => s + a.balance, 0);
+    return { bank: Math.round(bank * 100) / 100, treasury: Math.round(treasury * 100) / 100, total: Math.round((bank + treasury) * 100) / 100, accounts: list };
+  }
+  // Method 3: compute from journal entries
+  const je = (await query<{ code: string; name: string; balance: number }>(
+    `SELECT a.code, a.name, (sum(j.debit) - sum(j.credit))::float8 balance
+     FROM daftra_journal_entries j JOIN daftra_accounts a ON a.id = j.account_id
+     WHERE a.code LIKE '1201%' OR a.code LIKE '1202%'
+     GROUP BY a.code, a.name`
+  ).catch(() => ({ rows: [] }))).rows;
+  if (je.length > 0) {
+    const bank = je.filter(a => a.code.startsWith("1201")).reduce((s, a) => s + a.balance, 0);
+    const treasury = je.filter(a => a.code.startsWith("1202")).reduce((s, a) => s + a.balance, 0);
+    return { bank: Math.round(bank * 100) / 100, treasury: Math.round(treasury * 100) / 100, total: Math.round((bank + treasury) * 100) / 100, accounts: je.map(a => ({ ...a, balance: Math.round(a.balance * 100) / 100 })) };
+  }
+  return null;
+}
+
 export async function GET(req: Request) {
   const u = await getCurrentUser(); if (!u || u.role !== "admin") return forbid();
   try {
@@ -17,6 +51,7 @@ export async function GET(req: Request) {
   const s = (await query<{ cash_balance: number | null; cash_as_of: string | null; vat_filing: string; cash_collect_pct: number }>(
     "SELECT cash_balance::float8, cash_as_of::text, vat_filing, cash_collect_pct FROM fin_settings WHERE id=1"
   ).catch(() => ({ rows: [] as never[] }))).rows[0];
+  const daftraBal = await daftraBalances();
   const url = new URL(req.url);
   const includeNew = url.searchParams.get("new") === "1";
   const offsets = openBySupplier(await loadOrders().catch(() => []));
@@ -92,7 +127,8 @@ export async function GET(req: Request) {
     "SELECT week_start::text, actual::float8, forecast::float8 FROM cash_balance_log ORDER BY week_start DESC LIMIT 13"
   ).catch(() => ({ rows: [] }))).rows;
 
-  const forecast = cashForecast(fin, inp, s?.cash_balance ?? 0, {
+  const effectiveBalance = daftraBal ? daftraBal.total : (s?.cash_balance ?? 0);
+  const forecast = cashForecast(fin, inp, effectiveBalance, {
     includeNew, offsets, collectPct, vatFiling,
     vatPeriod: vatPeriodEstimate,
     cogsRatio: fin.baseline && fin.baseline.sales > 0 ? fin.baseline.cogs / fin.baseline.sales : undefined,
@@ -104,6 +140,8 @@ export async function GET(req: Request) {
     today,
     cash_balance: s?.cash_balance ?? null,
     cash_as_of: s?.cash_as_of ?? null,
+    daftra_balance: daftraBal,
+    effective_balance: effectiveBalance,
     vat_period: vatPeriodEstimate,
     vat_filing: vatFiling,
     collect_pct: collectPct,
