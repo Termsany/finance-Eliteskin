@@ -63,7 +63,7 @@ export function Parties({ d, kind, open, x }: { d: AccData; kind: PartyKind; ope
   </div>;
 }
 
-type St = { kind: PartyKind; name: string; lines: StLine[]; totals: { invoiced: number; refunds: number; paid: number; balance: number; open: number; overdue: number; credit_applied?: number; unallocated: number };
+type St = { kind: PartyKind; name: string; lines: StLine[]; totals: { invoiced: number; refunds: number; paid: number; offsets?: number; balance: number; open: number; overdue: number; credit_applied?: number; unallocated: number };
   open: Array<{ id: number; no: string; date: string; due: string; unpaid: number; days_late: number }>; last_invoice: string | null; last_payment: string | null;
   rating?: { avg_days: number | null; paid_invoices: number; label: string; suggested_credit: number | null } | null };
 type Followup = { id: number; customer: string; note: string; promise_date: string | null; promise_amount: number | null; status: "open" | "kept" | "broken"; created_at: string };
@@ -100,7 +100,7 @@ export function StatementDrawer({ kind, name, subdomain, onClose }: { kind: Part
             <div className="rounded-2xl bg-[var(--sky-light)] p-3"><div className="text-[11px] font-semibold text-[var(--muted)]">{isC ? "المحصّل" : "المدفوع"}</div><div className="text-[17px] font-extrabold tabular-nums text-emerald-700">{sar(s.totals.paid)}</div></div>
             <div className="rounded-2xl bg-[var(--sky-light)] p-3"><div className="text-[11px] font-semibold text-[var(--muted)]">متأخر</div><div className={`text-[17px] font-extrabold tabular-nums ${s.totals.overdue ? "text-red-700" : ""}`}>{sar(s.totals.overdue)}</div></div>
           </div>
-          <div className="text-[12px] text-[var(--muted)]">إجمالي الفواتير {sar(s.totals.invoiced)}{s.totals.refunds ? ` · مرتجعات ${sar(s.totals.refunds)}` : ""} · آخر فاتورة {s.last_invoice || "—"}{isC ? ` · آخر دفعة ${s.last_payment || "—"}` : ""}</div>
+          <div className="text-[12px] text-[var(--muted)]">إجمالي الفواتير {sar(s.totals.invoiced)}{s.totals.refunds ? ` · مرتجعات ${sar(s.totals.refunds)}` : ""}{!isC && (s.totals.offsets || 0) > 0 ? ` · مقاصة ${sar(s.totals.offsets)}` : ""} · آخر فاتورة {s.last_invoice || "—"}{isC ? ` · آخر دفعة ${s.last_payment || "—"}` : ""}</div>
           {isC && s.rating && <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] px-3 py-2.5 text-[12px]">
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${RATE_CLS[s.rating.label] || RATE_CLS["جديد"]}`}>عميل {s.rating.label}</span>
             {s.rating.avg_days !== null ? <span className="text-[var(--muted)]">بيسدّد في <b className="text-[var(--ink)]">{s.rating.avg_days} يوم</b> في المتوسط · {s.rating.paid_invoices} فاتورة اتسددت</span> : <span className="text-[var(--muted)]">لسه ما سددش فواتير</span>}
@@ -128,7 +128,7 @@ export function StatementDrawer({ kind, name, subdomain, onClose }: { kind: Part
                 <td className="p-2 text-center font-extrabold tabular-nums">{num(l.balance, 2)}</td></tr>; })}
                 {!lines.length && <tr><td colSpan={5} className="p-4 text-center text-[var(--muted)]">مفيش حركة</td></tr>}</tbody></table></div>
             {isC && <ReconcilePanel customer={name} appBalance={s.totals.open} />}
-            {!isC && <div className="mt-1.5 text-[11px] text-[var(--muted)]">دفعات الموردين مش بتتسحب من دفترة، فالمدفوع من كل فاتورة شراء ظاهر في نفس يومها.</div>}
+            {!isC && <div className="mt-1.5 text-[11px] text-[var(--muted)]">المدفوعات من دفترة + المقاصة المحصّلة بتخصم من حساب المورد تلقائياً.</div>}
           </div>
         </>}
       </div>

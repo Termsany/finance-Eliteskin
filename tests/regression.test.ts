@@ -174,6 +174,30 @@ describe("bug 21: supplier standalone returns in statement", () => {
   });
 });
 
+// Supplier offsets appear in statement and reduce balance
+describe("supplier offset in statement", () => {
+  it("offset entry reduces supplier balance and shows as offset kind", () => {
+    const docs: StDoc[] = [
+      { id: 1, no: "P1", date: "2026-09-01", due_days: 30, status: 0, total: 10000, paid: 0, unpaid: 10000, refund: 0 },
+    ];
+    const pays: StPay[] = [
+      { id: 5, date: "2026-10-15", amount: 3000, invoice_id: null, method: "offset" },
+      { id: 10, date: "2026-10-20", amount: 4000, invoice_id: 1, method: "transfer" },
+    ];
+    const st = statement("supplier", docs, pays, "2026-11-30");
+    const offLine = st.lines.find(l => l.kind === "offset");
+    expect(offLine).toBeDefined();
+    expect(offLine!.debit).toBe(3000);
+    expect(offLine!.note).toContain("مقاصة");
+    // Offset should NOT count as "paid"
+    expect(st.totals.paid).toBe(4000);
+    // Offset has its own total
+    expect(st.totals.offsets).toBe(3000);
+    // Balance: 10000 (purchase) - 3000 (offset) - 4000 (payment) = 3000 owed
+    expect(st.totals.balance).toBe(3000);
+  });
+});
+
 // Bug 19: export label change (verified indirectly — the actual test is reading the route file)
 describe("bug 19: export label correctness", () => {
   it("placeholder: export label changed from breakeven to target margin", () => {

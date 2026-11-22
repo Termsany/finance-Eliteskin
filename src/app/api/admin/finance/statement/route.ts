@@ -21,11 +21,19 @@ export async function GET(req: Request) {
     // sales returns not tied to an invoice in the books: deducted from what the customer owes (not cash)
     for (const r of (await query<{ date: string; amount: number }>("SELECT pay_date::text date, amount::float8 FROM daftra_standalone_returns WHERE client_id = ANY($1::bigint[])", [ids]).catch(() => ({ rows: [] }))).rows)
       pays.push({ id: "0", date: r.date, amount: r.amount, invoice_id: null, method: "return" });
-  } else if (kind === "supplier" && ids.length) {
-    pays = (await query<{ id: string; date: string; amount: number; invoice_id: string | null; method: string }>(
-      "SELECT id, pay_date::text date, amount::float8, purchase_id invoice_id, method FROM daftra_purchase_payments WHERE supplier_id = ANY($1::bigint[]) ORDER BY pay_date, id", [ids]).catch(() => ({ rows: [] }))).rows;
-    for (const r of (await query<{ date: string; amount: number }>("SELECT pay_date::text date, amount::float8 FROM daftra_supplier_standalone_returns WHERE supplier_id = ANY($1::bigint[])", [ids]).catch(() => ({ rows: [] }))).rows)
-      pays.push({ id: "0", date: r.date, amount: r.amount, invoice_id: null, method: "return" });
+  } else if (kind === "supplier") {
+    if (ids.length) {
+      pays = (await query<{ id: string; date: string; amount: number; invoice_id: string | null; method: string }>(
+        "SELECT id, pay_date::text date, amount::float8, purchase_id invoice_id, method FROM daftra_purchase_payments WHERE supplier_id = ANY($1::bigint[]) ORDER BY pay_date, id", [ids]).catch(() => ({ rows: [] }))).rows;
+      for (const r of (await query<{ date: string; amount: number }>("SELECT pay_date::text date, amount::float8 FROM daftra_supplier_standalone_returns WHERE supplier_id = ANY($1::bigint[])", [ids]).catch(() => ({ rows: [] }))).rows)
+        pays.push({ id: "0", date: r.date, amount: r.amount, invoice_id: null, method: "return" });
+    }
+    // Settled/collected offset orders reduce what we owe this supplier
+    const offRows = (await query<{ id: string; date: string; amount: number }>(
+      `SELECT o.id, coalesce(o.settled_at, o.collected_at, o.order_date)::text date,
+              round(coalesce(o.settled_amount, (SELECT sum(i.qty * (i.client_price - i.my_price)) FROM offset_order_items i WHERE i.order_id = o.id)), 2)::float8 amount
+       FROM offset_orders o WHERE o.supplier = $1 AND o.status IN ('collected','settled')`, [name]).catch(() => ({ rows: [] }))).rows;
+    for (const r of offRows) if (r.amount > 0) pays.push({ id: `off-${r.id}`, date: r.date, amount: r.amount, invoice_id: null, method: "offset" });
   }
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(new Date());
   const rating = kind === "client"
