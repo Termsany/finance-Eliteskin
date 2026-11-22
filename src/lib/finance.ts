@@ -1,5 +1,5 @@
 import { query } from "@/lib/db";
-import { catAccount, CATS, toEntries, toFixed, type AppExpense } from "@/lib/app-expenses";
+import { toFixed, type AppExpense } from "@/lib/app-expenses";
 
 import { riyadhToday } from "@/lib/riyadh-day";
 import { addDays } from "@/lib/fmt";
@@ -160,13 +160,17 @@ export function computeFinance(inp: Input, from0: string, to: string) {
     const totals: Record<string, number> = Object.fromEntries(BUCKETS.map(b => [b, 0]));
     const open: Array<{ id: number; no: string; date: string; party: string; unpaid: number; due: string; days: number }> = [];
     // group each party's open invoices, then subtract their credit oldest-due first
-    const byParty = new Map<string, Array<{ d: Doc; due: string; days: number }>>();
+    // Group by party_id when available, fall back to party name
+    const byParty = new Map<string, { name: string; list: Array<{ d: Doc; due: string; days: number }> }>();
     for (const d of docs) {
       if (!(d.unpaid > 0) || !(d.payment_status === 0 || d.payment_status === 1)) continue;
       const due = addDays(d.date, d.due_days), days = daysBetween(due, inp.today);
-      (byParty.get(d.party) || byParty.set(d.party, []).get(d.party)!).push({ d, due, days });
+      const key = d.party_id != null ? `id:${d.party_id}` : `n:${d.party}`;
+      const entry = byParty.get(key) || byParty.set(key, { name: d.party, list: [] }).get(key)!;
+      entry.name = d.party; // keep the latest name
+      entry.list.push({ d, due, days });
     }
-    for (const [name, list] of byParty) {
+    for (const [, { name, list }] of byParty) {
       list.sort((a, b) => a.d.date.localeCompare(b.d.date) || a.due.localeCompare(b.due));   // oldest invoice date first
       let c = credit?.get(name) || 0;
       for (const { d, due, days } of list) {
@@ -369,9 +373,9 @@ export async function loadInput(today: string): Promise<Input> {
   return { sales, purchases,
     products: (products.rows as Product[]).map(p => ({ ...p, id: Number(p.id) })),
     payments: payments.rows as Payment[], returns: returns.rows as Payment[],
-    // Daftra's expense/income entries plus the expenses kept in this app (one line per due month)
-    entries: [...(entries.rows as Entry[]).map(e => ({ ...e, id: Number(e.id), account_id: e.account_id === null ? null : Number(e.account_id) })), ...toEntries(app, today)],
-    accounts: [...(accounts.rows as Account[]).map(a => ({ ...a, id: Number(a.id) })), ...CATS.map(catAccount)],
+    // Only actual Daftra entries in P&L — app_expenses are for forecasting/planning, not actual opex
+    entries: (entries.rows as Entry[]).map(e => ({ ...e, id: Number(e.id), account_id: e.account_id === null ? null : Number(e.account_id) })),
+    accounts: (accounts.rows as Account[]).map(a => ({ ...a, id: Number(a.id) })),
     overrides: Object.fromEntries((overrides.rows as Array<{ account_id: string; treatment: Treatment }>).map(o => [Number(o.account_id), o.treatment])),
     fixed: toFixed(app) as Fixed[], settings: (settings.rows[0] as Settings) || { target_gross_margin: 45, target_net_margin: 15 }, today };
 }

@@ -7,7 +7,7 @@ const DAY = /^20\d\d-\d\d-\d\d$/;
 const STATUS: Record<number, string> = { 0: "غير مدفوعة", 1: "مدفوعة جزئياً", 2: "مدفوعة", 3: "مرتجعة" };
 const BK: Record<string, string> = { current: "لم تستحق", "1-30": "1-30 يوم", "31-60": "31-60 يوم", "61-90": "61-90 يوم", "90+": "+90 يوم" };
 const TREAT: Record<string, string> = { opex: "مصروف تشغيلي", cogs: "تكلفة مبيعات", exclude: "مستبعد (ليس مصروف)", other_income: "إيراد آخر" };
-const PRICE: Record<string, string> = { loss: "يُباع بخسارة", below_breakeven: "تحت سعر التعادل", thin: "هامش ضعيف", healthy: "هامش جيد", no_cost: "بدون تكلفة", dead_stock: "مخزون راكد", no_sales: "بدون مبيعات" };
+const PRICE: Record<string, string> = { loss: "يُباع بخسارة", below_breakeven: "أقل من الهامش المستهدف", thin: "هامش ضعيف", healthy: "هامش جيد", no_cost: "بدون تكلفة", dead_stock: "مخزون راكد", no_sales: "بدون مبيعات" };
 type Col = [header: string, key: string, width?: number, money?: boolean];
 
 /** Excel workbook of any (or every) section of the finance hub. */

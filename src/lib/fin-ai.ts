@@ -3,10 +3,20 @@ import type { computeFinance } from "@/lib/finance";
 type Fin = ReturnType<typeof computeFinance>;
 export type PrevKpi = { from: string; to: string; sales: number; cogs: number; gross: number; opex: number; other_income: number; net: number } | null;
 
-/** Previous period of the same length, right before `from` (null when it falls before the books start). */
+/** Previous period: same day range, shifted back by the number of months in the range (min 1). */
 export function prevRange(from: string, to: string, booksStart?: string | null): [string, string] | null {
-  const day = 864e5, f = Date.parse(`${from}T00:00:00Z`), t = Date.parse(`${to}T00:00:00Z`);
-  const pt = new Date(f - day).toISOString().slice(0, 10), pf = new Date(f - day - (t - f)).toISOString().slice(0, 10);
+  const [fy, fm] = from.slice(0, 7).split("-").map(Number);
+  const [ty, tm] = to.slice(0, 7).split("-").map(Number);
+  const monthSpan = Math.max(1, (ty - fy) * 12 + (tm - fm) + 1);
+  const shift = (d: string, n: number) => {
+    let [y, m] = d.slice(0, 7).split("-").map(Number);
+    m -= n;
+    while (m < 1) { m += 12; y--; }
+    while (m > 12) { m -= 12; y++; }
+    const day = Math.min(Number(d.slice(8, 10)), new Date(Date.UTC(y, m, 0)).getUTCDate());
+    return `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  };
+  const pf = shift(from, monthSpan), pt = shift(to, monthSpan);
   return booksStart && pf < booksStart ? null : [pf, pt];
 }
 export const prevKpi = (fin: Fin, from: string, to: string): PrevKpi =>

@@ -21,12 +21,15 @@ export function monthProgress(today: string) {
   return { day: d, days, frac: d / days };
 }
 
-function track(actual: number, target: number | null, frac: number): Target {
+function track(actual: number, target: number | null, frac: number, isSales: boolean = false): Target {
   if (target === null || !(target > 0)) return { target, actual: r2(actual), expected_by_now: null, pct: null, pace: null, projected: null, on_track: null };
-  const expected = target * frac, projected = frac > 0 ? actual / frac : actual;
+  const expected = target * frac;
+  // For profit, linear projection is unreliable (expenses cluster on salary day, etc.)
+  // For sales, it's more reasonable — they come throughout the month
+  const projected = frac > 0.1 ? actual / frac : null;
   return {
     target: r2(target), actual: r2(actual), expected_by_now: r2(expected), pct: r2(actual / target * 100),
-    pace: expected > 0 ? r2(actual / expected * 100) : null, projected: r2(projected),
+    pace: expected > 0 ? r2(actual / expected * 100) : null, projected: projected !== null ? r2(projected) : null,
     on_track: actual >= expected,
   };
 }
@@ -43,8 +46,8 @@ export function computeBudget(x: {
   const breakeven = gm ? r2(fixed / gm) : null;
   return {
     ...p,
-    sales: track(x.monthSales, x.salesTarget, p.frac),
-    profit: track(x.monthNet, x.profitTarget, p.frac),
+    sales: track(x.monthSales, x.salesTarget, p.frac, true),
+    profit: track(x.monthNet, x.profitTarget, p.frac, false),
     breakeven: {
       sales: breakeven, fixed: r2(fixed), gross_margin: x.grossMarginPct,
       covered_pct: breakeven ? r2(x.monthSales / breakeven * 100) : null,

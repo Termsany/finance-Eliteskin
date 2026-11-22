@@ -33,9 +33,12 @@ async function listAll(endpoint: string, key: string): Promise<Json[]> {
   for (let page = 1; page < 500; page++) {
     const j = await get(`${endpoint}.json?limit=100&page=${page}`);
     for (const x of (j.data as Json[]) || []) {
-      // normally { Invoice: {...} }; if Daftra wraps it under another name (e.g. InvoicePayment), take that object
-      const k = x[key] ? key : Object.keys(x).find(n => x[n] && typeof x[n] === "object" && !Array.isArray(x[n]));
-      if (k) { keys.add(k); out.push(x[k] as Json); }
+      if (x[key]) { keys.add(key); out.push(x[key] as Json); }
+      else {
+        const k = Object.keys(x).find(n => x[n] && typeof x[n] === "object" && !Array.isArray(x[n]));
+        if (k) { keys.add(k); out.push(x[k] as Json); }
+        else console.warn(`daftra listAll(${endpoint}): row has no object under "${key}" — keys: ${Object.keys(x).join(", ")}`);
+      }
     }
     const pg = j.pagination as Json | undefined;
     if (!pg || !pg.next) break;
@@ -129,12 +132,15 @@ async function syncDocs(kind: "sale" | "purchase") {
   const listed = all.filter(isPlain)
     .map(x => ({ id: num(x.id), modified: String(x.modified || ""), date: isoDate(x.date) }));
   const known = new Map((await query<{ id: string; modified: string }>(`SELECT id, modified FROM ${T.table}`)).rows.map(r => [Number(r.id), r.modified] as [number, string]));
+  // Also re-read open invoices (payment_status 0 or 1) — their payments may have changed without bumping `modified`
+  const openIds = new Set((await query<{ id: string }>(`SELECT id FROM ${T.table} WHERE payment_status IN (0, 1)`)).rows.map(r => Number(r.id)));
   let updated = 0;
-  for (const x of listed.filter(l => known.get(l.id) !== l.modified)) {
+  for (const x of listed.filter(l => known.get(l.id) !== l.modified || openIds.has(l.id))) {
     const j = await get(`${T.list}/${x.id}.json`);
     const { row, lines } = mapInvoice(((j.data as Json)[T.key]) as Json, kind);
     if (x.date) row.invoice_date = x.date; row.modified = x.modified;   // list payload is authoritative (stable formats)
     if (!row.invoice_date) continue;
+    if (row.currency && row.currency !== "SAR") console.warn(`daftra sync ${kind}: invoice ${row.id} is in ${row.currency}, not SAR — amounts may be wrong`);
     const c = await pool.connect();
     try {
       await c.query("BEGIN");
@@ -157,7 +163,16 @@ async function syncDocs(kind: "sale" | "purchase") {
       await c.query("COMMIT"); updated++;
     } catch (e) { await c.query("ROLLBACK").catch(() => {}); throw e; } finally { c.release(); }
   }
-  await query(`DELETE FROM ${T.table} WHERE NOT (id = ANY($1::bigint[]))`, [listed.map(x => x.id)]);
+  // Guard: don't mass-delete when Daftra returned an empty or suspiciously short list
+  const existing = (await query<{ n: string }>(`SELECT count(*)::text n FROM ${T.table}`)).rows[0];
+  const existingCount = Number(existing?.n || 0);
+  if (listed.length === 0 && existingCount > 0) {
+    console.warn(`daftra sync ${kind}: API returned 0 documents but we have ${existingCount} — skipping delete`);
+  } else if (existingCount > 10 && listed.length < existingCount * 0.5) {
+    console.warn(`daftra sync ${kind}: API returned ${listed.length} but we have ${existingCount} (< 50%) — skipping delete`);
+  } else {
+    await query(`DELETE FROM ${T.table} WHERE NOT (id = ANY($1::bigint[]))`, [listed.map(x => x.id)]);
+  }
   return { count: listed.length, updated };
 }
 
@@ -165,8 +180,18 @@ async function replaceAll(table: string, cols: string[], rows: unknown[][], wher
   const c = await pool.connect();
   try {
     await c.query("BEGIN");
-    // Serialize concurrent syncs on the same table and drop repeated ids (Daftra can repeat rows across pages).
     await c.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`daftra:${table}`]);
+    // Guard: don't wipe the table when Daftra returned nothing
+    const existing = (await c.query(`SELECT count(*)::text n FROM ${table} ${where}`)).rows[0];
+    const existingCount = Number(existing?.n || 0);
+    if (rows.length === 0 && existingCount > 0) {
+      console.warn(`daftra replaceAll(${table}): API returned 0 rows but we have ${existingCount} — skipping`);
+      await c.query("ROLLBACK"); return;
+    }
+    if (existingCount > 10 && rows.length < existingCount * 0.5) {
+      console.warn(`daftra replaceAll(${table}): API returned ${rows.length} but we have ${existingCount} (< 50%) — skipping`);
+      await c.query("ROLLBACK"); return;
+    }
     await c.query(`DELETE FROM ${table} ${where}`);
     const ph = cols.map((_, i) => `$${i + 1}`).join(",");
     const unique = [...new Map(rows.map(r => [String(r[0]), r])).values()];

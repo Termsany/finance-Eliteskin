@@ -42,11 +42,12 @@ export function runAudit(inp: Input, fin: ReturnType<typeof computeFinance>, dis
     fix: "راجع بنود الفاتورة في دفترة وتأكد إن كل بند عليه النسبة الصح." },
     live.filter(d => d.net > 0 && d.tax > 0.01 && Math.abs(d.tax / d.net - VAT) > 0.005).map(d => ({ key: `vat_rate:${d.id}`, title: `فاتورة ${d.no} — ${d.party}`, detail: `الضريبة ${r2(d.tax / d.net * 100)}% بدل 15% (الفرق ${r2(d.net * VAT - d.tax)} ر.س)`, amount: r2(Math.abs(d.net * VAT - d.tax)), date: d.date, link: { kind: "sale", id: d.id } })));
 
-  // 3. totals don't add up
-  add({ id: "total_mismatch", severity: "high", title: "إجمالي الفاتورة مش مساوي الصافي + الضريبة",
-    why: "لو الأرقام جوه الفاتورة مش متطابقة، يبقى فيه خطأ في الإدخال وكل التقارير المبنية عليها هتطلع غلط.",
-    fix: "افتح الفاتورة وصحّح البنود أو الإجمالي." },
-    sales.filter(d => Math.abs(d.net + d.tax - d.total) > 1).map(d => ({ key: `total:${d.id}`, title: `فاتورة ${d.no}`, detail: `صافي ${d.net} + ضريبة ${d.tax} ≠ إجمالي ${d.total}`, amount: r2(Math.abs(d.net + d.tax - d.total)), date: d.date, link: { kind: "sale", id: d.id } })));
+  // 3. line totals don't match invoice net (reveals unallocated invoice-level discounts)
+  add({ id: "total_mismatch", severity: "high", title: "مجموع أسطر الفاتورة مختلف عن الصافي",
+    why: "الفرق غالباً خصم على مستوى الفاتورة مش موزّع على الأصناف — ربح كل منتج وكل عميل هيطلع غلط.",
+    fix: "وزّع الخصم على الأصناف في دفترة، أو تأكد إن الأرقام صح." },
+    live.filter(d => { const lineSum = d.lines.reduce((s, l) => s + l.net, 0); return d.lines.length > 0 && Math.abs(lineSum - d.net) > 1; })
+      .map(d => { const lineSum = r2(d.lines.reduce((s, l) => s + l.net, 0)); return { key: `total:${d.id}`, title: `فاتورة ${d.no} — ${d.party}`, detail: `مجموع الأسطر ${lineSum} ≠ صافي الفاتورة ${d.net} (فرق ${r2(Math.abs(lineSum - d.net))})`, amount: r2(Math.abs(lineSum - d.net)), date: d.date, link: { kind: "sale", id: d.id } as Link }; }));
 
   // 4. possible duplicates
   const dupMap = new Map<string, typeof live>();

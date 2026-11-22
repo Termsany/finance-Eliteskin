@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   const includeNew = url.searchParams.get("new") === "1";
   const offsets = openBySupplier(await loadOrders().catch(() => []));
 
-  // Per-customer avg payment days from rating (use invoice_payments for linked matches)
+  // Per-customer avg payment days from rating — use daftra_payments_all (already deduplicated)
   const customerAvgDays: Record<string, number> = {};
   const salesByParty = new Map<string, typeof inp.sales>();
   const idToName = new Map<number, string>();
@@ -29,20 +29,34 @@ export async function GET(req: Request) {
     const arr = salesByParty.get(d.party) || []; arr.push(d); salesByParty.set(d.party, arr);
     if (d.party_id != null) idToName.set(Number(d.party_id), d.party);
   }
-  const invPayRows = (await query<{ invoice_id: string; pay_date: string; amount: string }>(
-    "SELECT invoice_id, pay_date::text, amount::float8 FROM daftra_invoice_payments"
-  ).catch(() => ({ rows: [] }))).rows;
+  // Build per-party payments from the already-deduplicated inp.payments (from daftra_payments_all view)
   const paysByParty = new Map<string, Array<{ date: string; amount: number; invoice_id: number | null }>>();
+  // Also read invoice_payments for linked invoice_id info (rateCustomer uses it for precise matching)
+  const invPayRows = (await query<{ id: string; invoice_id: string; pay_date: string; amount: string }>(
+    "SELECT id, invoice_id, pay_date::text, amount::float8 FROM daftra_invoice_payments"
+  ).catch(() => ({ rows: [] }))).rows;
+  const invPayByParty = new Map<string, Array<{ date: string; amount: number; invoice_id: number | null }>>();
   for (const ip of invPayRows) {
     const inv = inp.sales.find(s => s.id === Number(ip.invoice_id));
     if (inv) {
-      const arr = paysByParty.get(inv.party) || []; arr.push({ date: ip.pay_date, amount: Number(ip.amount), invoice_id: Number(ip.invoice_id) }); paysByParty.set(inv.party, arr);
+      const arr = invPayByParty.get(inv.party) || []; arr.push({ date: ip.pay_date, amount: Number(ip.amount), invoice_id: Number(ip.invoice_id) }); invPayByParty.set(inv.party, arr);
     }
   }
-  for (const p of inp.payments) {
-    if (p.client_id == null) continue;
-    const name = idToName.get(Number(p.client_id));
-    if (name) { const arr = paysByParty.get(name) || []; arr.push({ date: p.date, amount: p.amount, invoice_id: null }); paysByParty.set(name, arr); }
+  // For rating, prefer invoice_payments (has invoice_id links) over the flat payments list
+  for (const [name] of salesByParty) {
+    const linked = invPayByParty.get(name);
+    if (linked && linked.length > 0) {
+      paysByParty.set(name, linked);
+    } else {
+      // Fall back to client-level payments (no invoice_id link)
+      const paysForName: Array<{ date: string; amount: number; invoice_id: number | null }> = [];
+      for (const p of inp.payments) {
+        if (p.client_id == null) continue;
+        const pName = idToName.get(Number(p.client_id));
+        if (pName === name) paysForName.push({ date: p.date, amount: p.amount, invoice_id: null });
+      }
+      if (paysForName.length) paysByParty.set(name, paysForName);
+    }
   }
   for (const p of fin.ar.parties) {
     const docs = (salesByParty.get(p.name) || []).map(d => ({ id: d.id, date: d.date, total: d.total }));
@@ -59,11 +73,19 @@ export async function GET(req: Request) {
   const vatFiling = (s?.vat_filing === "monthly" ? "monthly" : "quarterly") as VatFiling;
   const collectPct = s?.cash_collect_pct ?? 90;
 
-  // VAT: extrapolate the partial month to a full filing period
+  // VAT: use actual closed months + extrapolate only the current partial month
+  const curMonth = today.slice(0, 7);
+  const closedMonths = (fin.monthly as Array<{ m: string; vat_out: number; vat_in: number }>).filter(m => String(m.m) < curMonth);
+  const curMonthData = (fin.monthly as Array<{ m: string; vat_out: number; vat_in: number }>).find(m => String(m.m) === curMonth);
   const dayOfMonth = Number(today.slice(8, 10));
   const daysInMonth = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0).getDate();
-  const monthlyVat = dayOfMonth > 0 ? fin.kpi.vat_payable / dayOfMonth * daysInMonth : 0;
-  const vatPeriodEstimate = Math.round(monthlyVat * (vatFiling === "quarterly" ? 3 : 1));
+  const curMonthVat = curMonthData && dayOfMonth > 0
+    ? ((curMonthData.vat_out - curMonthData.vat_in) / dayOfMonth * daysInMonth)
+    : 0;
+  // For the upcoming filing, determine which months are in the quarter/month
+  const filingMonths = vatFiling === "quarterly" ? 3 : 1;
+  const closedVat = closedMonths.slice(-filingMonths + 1).reduce((s, m) => s + (m.vat_out - m.vat_in), 0);
+  const vatPeriodEstimate = Math.round(Math.max(0, closedVat + curMonthVat));
 
   // Balance log for forecast accuracy
   const balanceLog = (await query<{ week_start: string; actual: number; forecast: number | null }>(
