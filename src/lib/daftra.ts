@@ -157,6 +157,11 @@ async function syncDocs(kind: "sale" | "purchase") {
         for (const p of mapInvoicePayments(j.data as Json, row.id, row.party_id))
           await c.query(`INSERT INTO daftra_invoice_payments(id,invoice_id,client_id,pay_date,amount,method,status,raw) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
             ON CONFLICT(id) DO UPDATE SET invoice_id=$2,client_id=$3,pay_date=$4,amount=$5,method=$6,status=$7,raw=$8`, [p.id, p.invoice_id, p.client_id, p.pay_date, p.amount, p.method, p.status, p.raw]);
+      } else {
+        await c.query("DELETE FROM daftra_purchase_payments WHERE purchase_id=$1", [row.id]).catch(() => {});
+        for (const p of mapInvoicePayments(j.data as Json, row.id, row.party_id))
+          await c.query(`INSERT INTO daftra_purchase_payments(id,purchase_id,supplier_id,pay_date,amount,method,status,raw) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT(id) DO UPDATE SET purchase_id=$2,supplier_id=$3,pay_date=$4,amount=$5,method=$6,status=$7,raw=$8`, [p.id, p.invoice_id, p.client_id, p.pay_date, p.amount, p.method, p.status, p.raw]).catch(() => {});
       }
       await c.query(`DELETE FROM ${T.items} WHERE ${T.fk}=$1`, [row.id]);
       for (const l of lines) await c.query(`INSERT INTO ${T.items}(${T.fk},line,product_id,item,quantity,unit_price,discount,net,tax) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [row.id, l.line, l.product_id, l.item, l.quantity, l.unit_price, l.discount, l.net, l.tax]);

@@ -23,8 +23,12 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
     } else {
       lines.push({ date: d.date, kind: "invoice", ref: d.no, doc_id: d.id, debit: 0, credit: d.total, note: `فاتورة شراء ${d.no}` });
       if (d.refund > 0) lines.push({ date: d.date, kind: "refund", ref: d.no, doc_id: d.id, debit: d.refund, credit: 0, note: `مرتجع على ${d.no}` });
-      const paid = r2(d.total - d.refund - d.unpaid);
-      if (paid > 0) lines.push({ date: d.date, kind: "payment", ref: d.no, doc_id: d.id, debit: paid, credit: 0, note: `المدفوع من ${d.no}` });
+      // If we have real payment records from Daftra, skip the synthetic "paid from invoice" line —
+      // the real payments below will carry the correct dates. Otherwise fall back to the invoice's paid field.
+      if (pays.length === 0) {
+        const paid = r2(d.total - d.refund - d.unpaid);
+        if (paid > 0) lines.push({ date: d.date, kind: "payment", ref: d.no, doc_id: d.id, debit: paid, credit: 0, note: `المدفوع من ${d.no}` });
+      }
     }
   }
   const isRet = (p: StPay) => p.method === "return";
@@ -33,6 +37,11 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
     if (p.invoice_id && returnedIds.has(p.invoice_id)) continue;
     lines.push({ date: p.date, kind: isRet(p) ? "refund" : "payment", ref: String(p.id), doc_id: p.invoice_id, debit: 0, credit: p.amount,
       note: isRet(p) ? "مرتجعات مش مربوطة بفاتورة" : p.method ? `دفعة (${p.method})` : "دفعة" });
+  }
+  if (kind === "supplier") for (const p of pays) {
+    if (p.invoice_id && returnedIds.has(p.invoice_id)) continue;
+    lines.push({ date: p.date, kind: "payment", ref: String(p.id), doc_id: p.invoice_id, debit: p.amount, credit: 0,
+      note: p.method ? `دفعة (${p.method})` : "دفعة" });
   }
   const order = { invoice: 0, refund: 1, payment: 2 } as const;
   lines.sort((a, b) => a.date.localeCompare(b.date) || order[a.kind] - order[b.kind]);
@@ -54,7 +63,9 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
   return {
     lines: out,
     totals: { invoiced: r2(docs.filter(d => !fullyReturned(d)).reduce((s, d) => s + d.total, 0)), refunds: r2(docs.filter(d => !fullyReturned(d)).reduce((s, d) => s + d.refund, 0) + pays.filter(p => isRet(p) && !(p.invoice_id && returnedIds.has(p.invoice_id))).reduce((s, p) => s + p.amount, 0)),
-      paid: r2(kind === "client" ? pays.filter(p => !isRet(p) && !(p.invoice_id && returnedIds.has(p.invoice_id))).reduce((s, p) => s + p.amount, 0) : docs.filter(d => !fullyReturned(d)).reduce((s, d) => s + Math.max(0, d.total - d.refund - d.unpaid), 0)),
+      paid: r2(kind === "client" ? pays.filter(p => !isRet(p) && !(p.invoice_id && returnedIds.has(p.invoice_id))).reduce((s, p) => s + p.amount, 0)
+        : pays.length > 0 ? pays.filter(p => !(p.invoice_id && returnedIds.has(p.invoice_id))).reduce((s, p) => s + p.amount, 0)
+        : docs.filter(d => !fullyReturned(d)).reduce((s, d) => s + Math.max(0, d.total - d.refund - d.unpaid), 0)),
       balance: r2(bal), open: openTotal, overdue: r2(open.filter(o => o.days_late > 0).reduce((s, o) => s + o.unpaid, 0)),
       // customer credit already netted off the open invoices above; what's left is an advance beyond every open invoice
       credit_applied: r2(credit0 - credit), unallocated: r2(bal - openTotal) },

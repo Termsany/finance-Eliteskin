@@ -117,6 +117,41 @@ describe("bug 17: statement excludes payments for returned invoices", () => {
   });
 });
 
+// Bug 20: supplier payments use real records when available
+describe("bug 20: supplier statement with real payment records", () => {
+  it("uses real payment dates instead of invoice date when payments are provided", () => {
+    const docs: StDoc[] = [
+      { id: 1, no: "P1", date: "2026-09-01", due_days: 30, status: 0, total: 5000, paid: 5000, unpaid: 0, refund: 0 },
+      { id: 2, no: "P2", date: "2026-10-01", due_days: 30, status: 0, total: 3000, paid: 0, unpaid: 3000, refund: 0 },
+    ];
+    // Real payment records with actual payment dates
+    const pays: StPay[] = [
+      { id: 10, date: "2026-11-15", amount: 5000, invoice_id: 1, method: "transfer" },
+    ];
+    const st = statement("supplier", docs, pays, "2026-11-30");
+    // Should NOT have a synthetic "paid from P1" at invoice date
+    const synthetic = st.lines.filter(l => l.note.includes("المدفوع من"));
+    expect(synthetic.length).toBe(0);
+    // Should have real payment at 2026-11-15
+    const real = st.lines.filter(l => l.date === "2026-11-15" && l.kind === "payment");
+    expect(real.length).toBe(1);
+    expect(real[0].debit).toBe(5000);
+    // Supplier balance sign: positive = we owe them. 5000 (P1) + 3000 (P2) - 5000 (payment) = 3000
+    expect(st.totals.balance).toBe(3000);
+  });
+
+  it("falls back to invoice paid field when no payment records exist", () => {
+    const docs: StDoc[] = [
+      { id: 1, no: "P1", date: "2026-09-01", due_days: 30, status: 0, total: 5000, paid: 5000, unpaid: 0, refund: 0 },
+    ];
+    const st = statement("supplier", docs, [], "2026-11-30");
+    // With no real payment records, should still show synthetic payment
+    const synthetic = st.lines.filter(l => l.note.includes("المدفوع من"));
+    expect(synthetic.length).toBe(1);
+    expect(st.totals.balance).toBe(0);
+  });
+});
+
 // Bug 19: export label change (verified indirectly — the actual test is reading the route file)
 describe("bug 19: export label correctness", () => {
   it("placeholder: export label changed from breakeven to target margin", () => {
