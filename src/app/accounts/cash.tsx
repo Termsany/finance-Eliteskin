@@ -145,10 +145,11 @@ export function CashTab({ go }: { go: (t: Tab) => void }) {
     if (r.ok) { toast("اتحفظ", "success"); await load(); } else toast("تعذر الحفظ", "error");
   }
 
-  if (!d) return <div className="h-40 animate-pulse rounded-2xl bg-white" />;
   const sc = SCENARIOS[scenario];
-  const f = useMemo(() => {
-    const base = d.forecast;
+  const forecast = d?.forecast;
+  const adjusted = useMemo(() => {
+    if (!forecast) return null;
+    const base = forecast;
     if (scenario === "base") return base;
     let bal = base.opening;
     const rows = base.rows.map(r => {
@@ -163,7 +164,10 @@ export function CashTab({ go }: { go: (t: Tab) => void }) {
     const lowest = rows.reduce((best, r, i) => r.balance < best.balance ? { balance: r.balance, week: i } : best, { balance: Infinity, week: -1 });
     const first_negative_week = rows.findIndex(r => r.balance < 0);
     return { ...base, rows, lowest, first_negative_week: first_negative_week >= 0 ? first_negative_week : null, closing: rows.length ? rows[rows.length - 1].balance : base.closing };
-  }, [d.forecast, scenario, sc]);
+  }, [forecast, scenario, sc]);
+
+  if (!d || !adjusted) return <div className="h-40 animate-pulse rounded-2xl bg-white" />;
+  const f = adjusted;
   const a = f.assumptions, neg = f.first_negative_week;
   const stale = d.cash_as_of && (Date.parse(d.today) - Date.parse(d.cash_as_of)) / 864e5 > 7;
 
