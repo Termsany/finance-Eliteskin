@@ -128,7 +128,7 @@ export function StatementDrawer({ kind, name, subdomain, onClose }: { kind: Part
                 <td className="p-2 text-center font-extrabold tabular-nums">{num(l.balance, 2)}</td></tr>; })}
                 {!lines.length && <tr><td colSpan={5} className="p-4 text-center text-[var(--muted)]">مفيش حركة</td></tr>}</tbody></table></div>
             {isC && <ReconcilePanel customer={name} appBalance={s.totals.open} />}
-            {!isC && <div className="mt-1.5 text-[11px] text-[var(--muted)]">المدفوعات من دفترة + المقاصة المحصّلة بتخصم من حساب المورد تلقائياً.</div>}
+            {!isC && <div className="mt-1.5 text-[11px] text-[var(--muted)]">المدفوعات من دفترة. المقاصة المسوّاة تظهر للعلم فقط ولا تأثر على الرصيد — الخصم الفعلي يتم من إشعار دفترة.</div>}
           </div>
         </>}
       </div>

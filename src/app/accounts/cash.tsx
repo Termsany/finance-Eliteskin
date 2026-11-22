@@ -211,6 +211,7 @@ export function CashTab({ go }: { go: (t: Tab) => void }) {
             {d.daftra_balance.accounts.map(a => <div key={a.code} className="flex justify-between"><span>{a.code} — {a.name}</span><b>{sar(a.balance)}</b></div>)}
           </div>
         </details>}
+        <a href="/api/admin/finance/daftra-diag" target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] text-[var(--muted)] hover:underline">تشخيص: عرض بيانات الحسابات الخام من دفترة</a>
       </Card>
     ) : (
       <Card title="رصيدك النهارده (بنك + خزنة)" hint="دفترة مش بتبعت أرصدة البنك — اكتب رصيدك الفعلي النهارده وأنا أحسب منه السيولة. لو دفترة بعتت أرصدة الحسابات (1201/1202) هتظهر تلقائي.">

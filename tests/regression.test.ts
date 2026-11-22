@@ -174,9 +174,9 @@ describe("bug 21: supplier standalone returns in statement", () => {
   });
 });
 
-// Supplier offsets appear in statement and reduce balance
+// Supplier offsets appear in statement as informational lines (don't affect balance)
 describe("supplier offset in statement", () => {
-  it("offset entry reduces supplier balance and shows as offset kind", () => {
+  it("offset shows as informational line without affecting running balance", () => {
     const docs: StDoc[] = [
       { id: 1, no: "P1", date: "2026-09-01", due_days: 30, status: 0, total: 10000, paid: 0, unpaid: 10000, refund: 0 },
     ];
@@ -187,14 +187,16 @@ describe("supplier offset in statement", () => {
     const st = statement("supplier", docs, pays, "2026-11-30");
     const offLine = st.lines.find(l => l.kind === "offset");
     expect(offLine).toBeDefined();
-    expect(offLine!.debit).toBe(3000);
+    // Offset line is informational: debit=0, amount in note
+    expect(offLine!.debit).toBe(0);
+    expect(offLine!.credit).toBe(0);
     expect(offLine!.note).toContain("مقاصة");
-    // Offset should NOT count as "paid"
+    expect(offLine!.note).toContain("3000");
+    // Offset does NOT count as "paid" and does NOT reduce balance
     expect(st.totals.paid).toBe(4000);
-    // Offset has its own total
     expect(st.totals.offsets).toBe(3000);
-    // Balance: 10000 (purchase) - 3000 (offset) - 4000 (payment) = 3000 owed
-    expect(st.totals.balance).toBe(3000);
+    // Balance: 10000 (purchase) - 4000 (payment) = 6000 owed (offset doesn't reduce it)
+    expect(st.totals.balance).toBe(6000);
   });
 });
 

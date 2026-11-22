@@ -41,8 +41,15 @@ export function statement(kind: "client" | "supplier", docs: StDoc[], pays: StPa
   }
   if (kind === "supplier") for (const p of pays) {
     if (p.invoice_id && returnedIds.has(p.invoice_id)) continue;
-    lines.push({ date: p.date, kind: isOff(p) ? "offset" : isRet(p) ? "refund" : "payment", ref: String(p.id), doc_id: p.invoice_id, debit: p.amount, credit: 0,
-      note: isOff(p) ? `مقاصة #${p.id}` : isRet(p) ? "مرتجعات مش مربوطة بفاتورة شراء" : p.method ? `دفعة (${p.method})` : "دفعة" });
+    if (isOff(p)) {
+      // Offsets are informational: show the line but don't affect the running balance.
+      // The actual deduction comes from Daftra's credit note / payment when the supplier settles.
+      lines.push({ date: p.date, kind: "offset", ref: String(p.id), doc_id: null, debit: 0, credit: 0,
+        note: `مقاصة #${p.id} — ${r2(p.amount)} ر.س (للعلم فقط، لا تؤثر على الرصيد)` });
+    } else {
+      lines.push({ date: p.date, kind: isRet(p) ? "refund" : "payment", ref: String(p.id), doc_id: p.invoice_id, debit: p.amount, credit: 0,
+        note: isRet(p) ? "مرتجعات مش مربوطة بفاتورة شراء" : p.method ? `دفعة (${p.method})` : "دفعة" });
+    }
   }
   const order = { invoice: 0, refund: 1, offset: 2, payment: 3 } as const;
   lines.sort((a, b) => a.date.localeCompare(b.date) || order[a.kind] - order[b.kind]);
